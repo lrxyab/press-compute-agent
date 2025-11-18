@@ -1,0 +1,279 @@
+# Copyright (c) 2025, ayush@frappe.io and contributors
+# For license information, please see license.txt
+
+import frappe
+from frappe import _
+from frappe.model.document import Document
+
+from xml.dom import minidom
+import libvirt
+
+from libvirt_python_api.disk.disk import Disk
+import os
+from agent.configuration.configs import XML_CONFIG
+from agent.configuration.paths import CONFIG_PATH
+from agent.configuration.connections import libvirt_connection
+from uuid import uuid4
+
+class VirtualMachine(Document):
+	# begin: auto-generated types
+	# This code is auto-generated. Do not modify anything in this block.
+
+	from typing import TYPE_CHECKING
+
+	if TYPE_CHECKING:
+		from agent.agent.doctype.network_interface.network_interface import NetworkInterface
+		from agent.agent.doctype.vm_disk.vm_disk import VMDisk
+		from frappe.types import DF
+
+		disks: DF.Table[VMDisk]
+		memory: DF.Float
+		network_interfaces: DF.Table[NetworkInterface]
+		number_of_vcpus: DF.Int
+		state: DF.Literal["Stopped", "Running", "Paused", "Saved"]
+		uuid: DF.Data | None
+	# end: auto-generated types
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.domain = None
+		if self.name:
+			try:
+				self.domain = libvirt_connection.lookupByName(self.name)
+			except libvirt.libvirtError as e:
+				if e.get_error_code() == libvirt.VIR_ERR_NO_DOMAIN:
+					pass
+				else:
+					frappe.throw(_("Faced an error {} {}").format(e, self.name))
+		if not self.uuid:
+			self.uuid = str(uuid4())
+
+	def before_insert(self):
+		self.apply_config()
+		self.set_state()
+
+	def validate(self):
+		self.validate_root_device_exists()
+
+	def validate_root_device_exists(self):
+		for disk in self.disks:
+			if disk.device == "vda":
+				if not frappe.db.get_value("Disk", disk.disk, "is_primary_disk"):
+					frappe.throw(_("Disk {} should be a system image disk.").format(disk.disk))
+
+				return
+		frappe.throw(_("Could not find a disk as the device 'vda'"))
+
+
+	def on_change(self):
+		doc_before_save = self.get_doc_before_save()
+
+
+		# check for state change
+		# if doc_before_save.memory != self.memory or doc_before_save.number_of_vcpus != self.number_of_vcpus or doc_before_save.disks != self.disks:
+		if not doc_before_save:
+			return
+		self.apply_config()
+
+		if doc_before_save.state != self.state:
+			try:
+				self.set_state()
+			except Exception as e:
+				frappe.msgprint(_("""There was an error {} while updating the state. Fetching the
+					state of the virtual machine""").format(e))
+
+		# live changes
+		if self.domain.isActive():
+			if doc_before_save.memory != self.memory:
+				self.domain.setMemoryFlags(self.memory*1024*1024)
+
+			# hacky way to declaratively apply disks
+			prev_disks = set([(disk.disk, disk.device) for disk in doc_before_save.disks])
+			new_disks = set([(disk.disk, disk.device) for disk in self.disks])
+			if new_disks != prev_disks:
+				# detach disks that don't exist anymore
+				for disk in prev_disks.difference(new_disks):
+					self.detach_disk(disk[1])
+				# attach newly defined disks
+				for disk in new_disks.difference(prev_disks):
+					disk_doc = frappe.get_doc("Disk", disk[0])
+					print(disk_doc)
+					path = disk_doc.get_path()
+					self.attach_disk(path, disk[1])
+
+
+	def on_cancel(self):
+		self.domain.undefine()
+
+	def set_state(self):
+		try:
+			match self.state:
+				case "Running":
+					self.start()
+				case "Stopped":
+					self.stop()
+				case "Paused":
+					self.pause()
+		except:
+			pass
+
+	def start(self):
+		try:
+			self.domain.create()
+		except libvirt.libvirtError as e:
+			if e.get_error_code() == libvirt.VIR_ERR_DOM_EXIST:
+				self.domain.resume()
+		self.state = "Running"
+
+	def stop(self):
+		self.domain.shutdown()
+		self.state = "Stopped"
+
+	def pause(self):
+		self.domain.suspend()
+		self.state = "Paused"
+
+	def apply_config(self):
+
+		self.xml = get_new_config()
+		self.create_config()
+		print(self.xml.toxml())
+		dom = libvirt_connection.defineXMLFlags(self.xml.toxml())
+
+		# try:
+		# 	dom.create()
+		# except:
+		# 	frappe.throw("There was an error creating the virtual machine.")
+		return dom
+
+	# the most important function
+	# takes parameters from the document and converts them to XML
+	def create_config(self):
+		# set vcpus
+		vcpu_element = self.xml.getElementsByTagName("vcpu")[0]
+		vcpu_element.firstChild.nodeValue = self.number_of_vcpus
+
+		# set a unique UUID
+		uuid_element = self.xml.getElementsByTagName("uuid")[0]
+		uuid_element.firstChild.nodeValue = self.uuid
+
+		# set name
+		name_element = self.xml.getElementsByTagName("name")[0]
+		name_element.firstChild.nodeValue = self.name
+
+		# set current memory
+		currentMemory_element = self.xml.getElementsByTagName("currentMemory")[0]
+		currentMemory_element.firstChild.nodeValue = self.memory * 1024 * 1024
+
+		memory_element = self.xml.getElementsByTagName("memory")[0]
+		memory_element.firstChild.nodeValue = self.memory * 1024 * 1024
+
+		# image_path = self.get_image_path()
+		# shutil.copy(os.path.join(CONFIG_PATH, "images", "base.qcow2"), image_path)
+		self.create_device_config()
+		self.create_network_interface_config()
+
+	def create_device_config(self):
+		devices = self.xml.getElementsByTagName("devices")[0]
+
+		for disk in self.disks:
+			disk_elem = self.xml.createElement("disk")
+			disk_elem.setAttribute("type", "file")
+			disk_elem.setAttribute("device", "disk")
+
+			driver = self.xml.createElement("driver")
+			driver.setAttribute("name", "qemu")
+			driver.setAttribute("type", "qcow2")
+			disk_elem.appendChild(driver)
+
+			source = self.xml.createElement("source")
+			disk_doc = frappe.get_doc("Disk", disk.disk)
+			file_path = disk_doc.get_path()
+			source.setAttribute("file", file_path)
+			disk_elem.appendChild(source)
+
+			target = self.xml.createElement("target")
+			target.setAttribute("dev", disk.device)
+			target.setAttribute("bus", "virtio")
+			disk_elem.appendChild(target)
+
+			devices.appendChild(disk_elem)
+		self.device_config = devices
+
+
+	def create_network_interface_config(self):
+		#TODO: add condition for all types. currently only using bridges
+		devices = self.xml.getElementsByTagName("devices")[0]
+		for network_interface in self.network_interfaces:
+			interface = self.xml.createElement("interface")
+			interface.setAttribute("type", "bridge")
+
+			source = self.xml.createElement("source")
+			source.setAttribute("bridge", network_interface.name1)
+			interface.appendChild(source)
+
+			vport = self.xml.createElement("virtualport")
+			vport.setAttribute("type", "openvswitch")
+			interface.appendChild(vport)
+
+			model = self.xml.createElement("model")
+			model.setAttribute("type", "virtio")
+			interface.appendChild(model)
+			devices.appendChild(interface)
+
+	def attach_disk(self, disk: str, dev: str):
+		xml = generate_disk_xml(disk, dev)
+
+		self.domain.attachDeviceFlags(xml, libvirt.VIR_DOMAIN_AFFECT_LIVE)
+
+	def detach_disk(self, dev: str):
+		xml_string = self.domain.XMLDesc()
+		xml = minidom.parseString(xml_string)
+		for disk in xml.getElementsByTagName("disk"):
+			disk_dev = disk.getElementsByTagName("target")[0].getAttribute("dev")
+			if disk_dev == dev:
+				self.domain.detachDeviceFlags(disk.toxml(),
+					libvirt.VIR_DOMAIN_AFFECT_LIVE)
+
+	def delete_disk(self, dev: str):
+		xml_string = self.domain.XMLDesc()
+		xml = minidom.parseString(xml_string)
+		for disk in xml.getElementsByTagName("disk"):
+			disk_dev = disk.getElementsByTagName("target")[0].getAttribute("dev")
+			if disk_dev == dev:
+				disk_path = disk.getElementsByTagName("source")[0].getAttribute("file")
+				os.remove(disk_path)
+				break
+	def get_image_path(self):
+		return os.path.join(CONFIG_PATH, "disks", f"{self.name}.qcow2")
+
+
+def generate_disk_xml(disk: Disk, dev: str):
+		# never gonna hardcode xml!
+		# TODO: generalise for other devices when required in the future
+
+		doc = minidom.Document()
+		disk_element = doc.createElement("disk")
+		doc.appendChild(disk_element)
+		disk_element.setAttribute("type", "file")
+		disk_element.setAttribute("device", "disk")
+
+		driver_element = doc.createElement("driver")
+		disk_element.appendChild(driver_element)
+		driver_element.setAttribute("name", "qemu")
+		driver_element.setAttribute("type", "qcow2")
+
+		source_element = doc.createElement("source")
+		disk_element.appendChild(source_element)
+		source_element.setAttribute("file", disk)
+
+		target = doc.createElement("target")
+		disk_element.appendChild(target)
+		target.setAttribute("dev", dev)
+		target.setAttribute("bus", "virtio")
+
+		return disk_element.toxml()
+
+def get_new_config():
+		xml = minidom.parseString(XML_CONFIG)
+		return xml
