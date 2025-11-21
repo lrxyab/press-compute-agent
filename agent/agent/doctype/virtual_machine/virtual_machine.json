@@ -40,7 +40,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "State",
-   "options": "Stopped\nRunning\nPaused\nSaved",
+   "options": "Undefined\nStopped\nRunning\nPaused\nSaved",
    "reqd": 1
   },
   {
@@ -69,7 +69,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-11-14 11:31:21.476507",
+ "modified": "2025-11-20 14:35:28.032069",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine",

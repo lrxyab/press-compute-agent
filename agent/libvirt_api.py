@@ -17,16 +17,12 @@ class LibvirtAPI:
 
 
     def new_vm(self, name, vcpus=1, memory=1024*512, storage=1024*1024*1024*2):
-        try:
-            self.xml = get_new_config()
-        except Exception as e:
-            print(e)
+        self.xml = get_new_config()
 
 
         # set vcpus
         vcpu_element = self.xml.getElementsByTagName("vcpu")[0]
         vcpu_element.firstChild.nodeValue = vcpus
-        print(vcpu_element)
 
         # set a unique UUID
         uuid_element = self.xml.getElementsByTagName("uuid")[0]

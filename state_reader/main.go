@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"flag"
+	"io"
 	"net/http"
 	"time"
 
@@ -17,14 +18,14 @@ type VMState struct {
 	Memory uint   `json:"memory"`
 	VCPUs  uint   `json:"vcpus"`
 	Disks  []Disk `json:"disks"`
+	State  int    `json:"state"`
 }
 type Disk struct {
-	Name   string `json:"name"`
-	Device string `json:"device"`
+	FilePath string `json:"file_path"`
+	Device   string `json:"device"`
 }
 type VMDetails struct {
 	VMDetails []VMState `json:"vm_details"`
-	// VMDetails string `json:"vm_details"`
 }
 
 func main() {
@@ -32,22 +33,26 @@ func main() {
 	flag.Parse()
 
 	conn, _ := libvirt.NewConnect("qemu:///system")
-	domains, _ := conn.ListAllDomains(libvirt.CONNECT_LIST_DOMAINS_PERSISTENT)
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(5 * time.Second)
 	for range ticker.C {
 		var details VMDetails
+		domains, _ := conn.ListAllDomains(0)
 		for _, domain := range domains {
 			var desc libvirtxml.Domain
 			var state VMState
 
-			xmlDesc, _ := domain.GetXMLDesc(0)
+			xmlDesc, _ := domain.GetXMLDesc(libvirt.DOMAIN_XML_INACTIVE)
 			xml.Unmarshal([]byte(xmlDesc), &desc)
+			state.Name, _ = domain.GetName()
 			state.Memory = desc.Memory.Value
 			state.VCPUs = desc.VCPU.Value
-			state.Name, _ = domain.GetName()
+			domainState, _, _ := domain.GetState()
+			state.State = int(domainState)
+			state.State = int(domainState)
+
 			for _, disk := range desc.Devices.Disks {
 				var vmDisk Disk
-				vmDisk.Name = disk.Source.File.File
+				vmDisk.FilePath = disk.Source.File.File
 				vmDisk.Device = disk.Target.Dev
 				state.Disks = append(state.Disks, vmDisk)
 			}
@@ -58,6 +63,8 @@ func main() {
 		req, _ := http.NewRequest("POST", *url, bytes.NewBuffer(b))
 		req.Header.Set("Content-Type", "application/json")
 		defer req.Body.Close()
-		_, _ = http.DefaultClient.Do(req)
+		r, _ := http.DefaultClient.Do(req)
+
+		_, _ = io.ReadAll(r.Body)
 	}
 }

@@ -6,14 +6,23 @@ from frappe import _
 from frappe.model.document import Document
 
 from xml.dom import minidom
+from frappe.utils.caching import redis_cache
 import libvirt
 
-from libvirt_python_api.disk.disk import Disk
 import os
 from agent.configuration.configs import XML_CONFIG
 from agent.configuration.paths import CONFIG_PATH
 from agent.configuration.connections import libvirt_connection
 from uuid import uuid4
+
+DOMAIN_STATE_MAP = {0: "Undefined",
+					1: "Running",
+					3: "Paused",
+					4: "Stopped",
+					5: "Stopped",
+					6: "Stopped",
+					7: "Paused",
+					}
 
 class VirtualMachine(Document):
 	# begin: auto-generated types
@@ -30,13 +39,14 @@ class VirtualMachine(Document):
 		memory: DF.Float
 		network_interfaces: DF.Table[NetworkInterface]
 		number_of_vcpus: DF.Int
-		state: DF.Literal["Stopped", "Running", "Paused", "Saved"]
+		state: DF.Literal["Undefined", "Stopped", "Running", "Paused", "Saved"]
 		uuid: DF.Data | None
 	# end: auto-generated types
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 		self.domain = None
+		self.polled = False
 		if self.name:
 			try:
 				self.domain = libvirt_connection.lookupByName(self.name)
@@ -66,6 +76,8 @@ class VirtualMachine(Document):
 
 
 	def on_change(self):
+		if self.polled:
+			return
 		doc_before_save = self.get_doc_before_save()
 
 
@@ -82,11 +94,6 @@ class VirtualMachine(Document):
 				frappe.msgprint(_("""There was an error {} while updating the state. Fetching the
 					state of the virtual machine""").format(e))
 
-		# live changes
-		if self.domain.isActive():
-			if doc_before_save.memory != self.memory:
-				self.domain.setMemoryFlags(self.memory*1024*1024)
-
 			# hacky way to declaratively apply disks
 			prev_disks = set([(disk.disk, disk.device) for disk in doc_before_save.disks])
 			new_disks = set([(disk.disk, disk.device) for disk in self.disks])
@@ -97,8 +104,7 @@ class VirtualMachine(Document):
 				# attach newly defined disks
 				for disk in new_disks.difference(prev_disks):
 					disk_doc = frappe.get_doc("Disk", disk[0])
-					print(disk_doc)
-					path = disk_doc.get_path()
+					path = disk_doc.file_path
 					self.attach_disk(path, disk[1])
 
 
@@ -118,10 +124,14 @@ class VirtualMachine(Document):
 			pass
 
 	def start(self):
-		try:
-			self.domain.create()
-		except libvirt.libvirtError as e:
-			if e.get_error_code() == libvirt.VIR_ERR_DOM_EXIST:
+		state, _ = self.domain.state()
+		# 0 is undefined
+		match DOMAIN_STATE_MAP[state]:
+			case "Undefined":
+				self.domain.create()
+			case "Stopped":
+				self.domain.create()
+			case "Paused":
 				self.domain.resume()
 		self.state = "Running"
 
@@ -137,7 +147,6 @@ class VirtualMachine(Document):
 
 		self.xml = get_new_config()
 		self.create_config()
-		print(self.xml.toxml())
 		dom = libvirt_connection.defineXMLFlags(self.xml.toxml())
 
 		# try:
@@ -163,10 +172,10 @@ class VirtualMachine(Document):
 
 		# set current memory
 		currentMemory_element = self.xml.getElementsByTagName("currentMemory")[0]
-		currentMemory_element.firstChild.nodeValue = self.memory * 1024 * 1024
+		currentMemory_element.firstChild.nodeValue = int(self.memory * 1024 * 1024)
 
 		memory_element = self.xml.getElementsByTagName("memory")[0]
-		memory_element.firstChild.nodeValue = self.memory * 1024 * 1024
+		memory_element.firstChild.nodeValue = int(self.memory * 1024 * 1024)
 
 		# image_path = self.get_image_path()
 		# shutil.copy(os.path.join(CONFIG_PATH, "images", "base.qcow2"), image_path)
@@ -248,7 +257,7 @@ class VirtualMachine(Document):
 		return os.path.join(CONFIG_PATH, "disks", f"{self.name}.qcow2")
 
 
-def generate_disk_xml(disk: Disk, dev: str):
+def generate_disk_xml(disk: str, dev: str):
 		# never gonna hardcode xml!
 		# TODO: generalise for other devices when required in the future
 
@@ -277,3 +286,81 @@ def generate_disk_xml(disk: Disk, dev: str):
 def get_new_config():
 		xml = minidom.parseString(XML_CONFIG)
 		return xml
+
+
+#TODO: better, consistent naming
+@frappe.whitelist(methods=["POST"], allow_guest=True)
+def update_details(vm_details=[]):
+	disks_map = get_all_disks()
+
+	all_vms = set(frappe.get_all("Virtual Machine", {"state": ("!=", "Undefined")}, pluck="name"))
+	defined_vms = {i["name"] for i in vm_details}
+
+	for undefined_vm in all_vms.difference(defined_vms):
+		frappe.db.set_value("Virtual Machine", undefined_vm, "state", "Undefined")
+
+
+	for vm_detail in vm_details:
+		if frappe.db.exists("Virtual Machine", vm_detail["name"]):
+			vm_doc = frappe.get_doc("Virtual Machine", vm_detail["name"])
+		else:
+			continue
+
+		new_vm_memory = int(vm_detail["memory"])/(1024*1024)
+		if vm_doc.memory != new_vm_memory:
+			vm_doc.db_set("memory", new_vm_memory)
+		if vm_doc.number_of_vcpus != vm_detail["vcpus"]:
+			vm_doc.db_set("number_of_vcpus", vm_detail["vcpus"])
+
+		new_domain_state = DOMAIN_STATE_MAP[vm_detail["state"]]
+		if vm_doc.state != new_domain_state:
+			vm_doc.db_set("state", new_domain_state)
+
+		true_vm_disks = []
+		for vm_detail_disk in vm_detail["disks"]:
+			name = disks_map[vm_detail_disk["file_path"]]
+			true_vm_disks.append({"disk": name, "device": vm_detail_disk["device"]})
+
+		vm_disks = [{"disk": i.name, "device": i.device} for i in vm_doc.disks]
+
+		if sorted([(i["disk"], i["device"]) for i in vm_disks]) != sorted([(i["disk"], i["device"]) for i in true_vm_disks]):
+			vm_doc.polled = True
+			vm_doc.disks = []
+			for true_vm_disk in true_vm_disks:
+				vm_doc.append("disks", true_vm_disk)
+			vm_doc.save(ignore_permissions=True)
+
+
+
+@redis_cache(ttl=10)
+def get_all_disks():
+	disk_doc = frappe.qb.DocType("Disk")
+	query = disk_doc.select("name", "file_path")
+	disks_map = {i.file_path: i.name for i in query.run(as_dict=True)}
+	return disks_map
+
+def parse_machine_details(xml_string: str):
+	out = {
+		"memory": 0,
+		"vcpus": 0,
+		"disks": [],
+		"network_devices": []
+	}
+
+	xml = minidom.parseString(xml_string)
+	vcpus = int(xml.getElementsByTagName("vcpu")[0].childNodes[0].nodeValue)
+	memory = int(xml.getElementsByTagName("memory")[0].childNodes[0].nodeValue)
+	disk_elements = xml.getElementsByTagName("disk")
+	disks = []
+	for disk_element in disk_elements:
+		file_path = disk_element.getElementsByTagName("source")[0].getAttribute("file")
+		disk_name = frappe.get_value("Disk", {"file_path": file_path}, "name")
+		dev = disk_element.getElementsByTagName("target")[0].getAttribute("dev")
+		disks.append({"name": disk_name, "path": file_path, "dev": dev})
+
+
+	out["vcpus"] = vcpus
+	out["memory"] = memory / (1024 * 1024)
+	out["disks"] = disks
+	# out["network_interfaces"] =
+	return out

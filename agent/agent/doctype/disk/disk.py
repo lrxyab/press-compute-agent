@@ -23,6 +23,7 @@ class Disk(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
+		file_path: DF.Data | None
 		is_primary_disk: DF.Check
 		size: DF.Float
 		uuid: DF.Data | None
@@ -38,12 +39,15 @@ class Disk(Document):
 			self.create_system_image()
 		else:
 			self.create_disk()
+
 	def get_path(self):
 		return os.path.join(DISKS_ROOT, self.uuid + ".qcow2")
 
 	def create_system_image(self):
-		image_path = self.get_path()
-		shutil.copy(os.path.join(CONFIG_PATH, "images", "base.qcow2"), image_path)
+		file_path = self.get_path()
+		shutil.copy(os.path.join(CONFIG_PATH, "images", "base.qcow2"), file_path)
+		self.file_path = file_path
+
 	def create_disk(self):
 		# TODO: find a way to do this without subprocess calls
 		try:
