@@ -9,10 +9,9 @@ from frappe.model.document import Document
 import os
 import subprocess
 from agent.configuration.paths import CONFIG_PATH
+from agent.utils import is_orchestrator
 
 DISKS_ROOT = os.path.join(CONFIG_PATH, "disks")
-
-
 
 class Disk(Document):
 	# begin: auto-generated types
@@ -33,20 +32,27 @@ class Disk(Document):
 		super().__init__(*args, **kwargs)
 		if not self.uuid:
 			self.uuid = str(uuid4())
+		file_path = self.get_path()
+		self.file_path = file_path
 
 	def before_insert(self):
-		if self.is_primary_disk:
-			self.create_system_image()
+		if is_orchestrator():
+			from orchestrator.orchestrator_mapper.api import ComputeCall
+
+			call_to_agent = ComputeCall(self.agent)
+			doc_dict = call_to_agent.create_doc("Disk", self.as_dict())
+			self.update(doc_dict)
 		else:
-			self.create_disk()
+			if self.is_primary_disk:
+				self.create_system_image()
+			else:
+				self.create_disk()
 
 	def get_path(self):
 		return os.path.join(DISKS_ROOT, self.uuid + ".qcow2")
 
 	def create_system_image(self):
-		file_path = self.get_path()
-		shutil.copy(os.path.join(CONFIG_PATH, "images", "base.qcow2"), file_path)
-		self.file_path = file_path
+		shutil.copy(os.path.join(CONFIG_PATH, "images", "base.qcow2"), self.file_path)
 
 	def create_disk(self):
 		# TODO: find a way to do this without subprocess calls

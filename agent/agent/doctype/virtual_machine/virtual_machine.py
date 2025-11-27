@@ -13,7 +13,9 @@ import os
 from agent.configuration.configs import XML_CONFIG
 from agent.configuration.paths import CONFIG_PATH
 from agent.configuration.connections import libvirt_connection
+from agent.utils import is_orchestrator
 from uuid import uuid4
+
 
 DOMAIN_STATE_MAP = {0: "Undefined",
 					1: "Running",
@@ -59,8 +61,16 @@ class VirtualMachine(Document):
 			self.uuid = str(uuid4())
 
 	def before_insert(self):
-		self.apply_config()
-		self.set_state()
+		if is_orchestrator():
+			from orchestrator.orchestrator_mapper.api import ComputeCall
+
+			call_to_agent = ComputeCall(self.agent)
+			doc_dict = call_to_agent.create_doc("Virtual Machine", self.as_dict())
+			frappe.msgprint(f"{doc_dict}")
+			self.update(doc_dict)
+		else:
+			self.apply_config()
+			self.set_state()
 
 	def validate(self):
 		self.validate_root_device_exists()
@@ -76,36 +86,43 @@ class VirtualMachine(Document):
 
 
 	def on_change(self):
-		if self.polled:
-			return
-		doc_before_save = self.get_doc_before_save()
+		if is_orchestrator():
+			from orchestrator.orchestrator_mapper.api import ComputeCall
 
+			call_to_agent = ComputeCall(self.agent)
+			doc_dict = call_to_agent.update_doc("Virtual Machine", self.name, self.as_dict())
+			frappe.msgprint(f"{doc_dict}")
+			self.update(doc_dict)
+		else:
+			if self.polled:
+				return
+			doc_before_save = self.get_doc_before_save()
 
-		# check for state change
-		# if doc_before_save.memory != self.memory or doc_before_save.number_of_vcpus != self.number_of_vcpus or doc_before_save.disks != self.disks:
-		if not doc_before_save:
-			return
-		self.apply_config()
+			# check for state change
+			# if doc_before_save.memory != self.memory or doc_before_save.number_of_vcpus != self.number_of_vcpus or doc_before_save.disks != self.disks:
+			if not doc_before_save:
+				return
+			self.apply_config()
 
-		if doc_before_save.state != self.state:
-			try:
-				self.set_state()
-			except Exception as e:
-				frappe.msgprint(_("""There was an error {} while updating the state. Fetching the
-					state of the virtual machine""").format(e))
+			if doc_before_save.state != self.state:
+				try:
+					self.set_state()
+				except Exception as e:
+					frappe.msgprint(_("""There was an error {} while updating the state. Fetching the
+						state of the virtual machine""").format(e))
 
-			# hacky way to declaratively apply disks
-			prev_disks = set([(disk.disk, disk.device) for disk in doc_before_save.disks])
-			new_disks = set([(disk.disk, disk.device) for disk in self.disks])
-			if new_disks != prev_disks:
-				# detach disks that don't exist anymore
-				for disk in prev_disks.difference(new_disks):
-					self.detach_disk(disk[1])
-				# attach newly defined disks
-				for disk in new_disks.difference(prev_disks):
-					disk_doc = frappe.get_doc("Disk", disk[0])
-					path = disk_doc.file_path
-					self.attach_disk(path, disk[1])
+				# hacky way to declaratively apply disks
+				prev_disks = set([(disk.disk, disk.device) for disk in doc_before_save.disks])
+				new_disks = set([(disk.disk, disk.device) for disk in self.disks])
+				if new_disks != prev_disks:
+					# detach disks that don't exist anymore
+					for disk in prev_disks.difference(new_disks):
+						self.detach_disk(disk[1])
+					# attach newly defined disks
+					for disk in new_disks.difference(prev_disks):
+						disk_doc = frappe.get_doc("Disk", disk[0])
+						path = disk_doc.file_path
+						self.attach_disk(path, disk[1])
 
 
 	def on_cancel(self):
@@ -318,8 +335,11 @@ def update_details(vm_details=[]):
 
 		true_vm_disks = []
 		for vm_detail_disk in vm_detail["disks"]:
-			name = disks_map[vm_detail_disk["file_path"]]
-			true_vm_disks.append({"disk": name, "device": vm_detail_disk["device"]})
+			try:
+				name = disks_map[vm_detail_disk["file_path"]]
+				true_vm_disks.append({"disk": name, "device": vm_detail_disk["device"]})
+			except:
+				continue
 
 		vm_disks = [{"disk": i.name, "device": i.device} for i in vm_doc.disks]
 

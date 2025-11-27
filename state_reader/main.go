@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"flag"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -33,8 +34,8 @@ func main() {
 	flag.Parse()
 
 	conn, _ := libvirt.NewConnect("qemu:///system")
-	ticker := time.NewTicker(5 * time.Second)
-	for range ticker.C {
+	ticker := time.Tick(5 * time.Second)
+	for range ticker {
 		var details VMDetails
 		domains, _ := conn.ListAllDomains(0)
 		for _, domain := range domains {
@@ -47,7 +48,6 @@ func main() {
 			state.Memory = desc.Memory.Value
 			state.VCPUs = desc.VCPU.Value
 			domainState, _, _ := domain.GetState()
-			state.State = int(domainState)
 			state.State = int(domainState)
 
 			for _, disk := range desc.Devices.Disks {
@@ -65,6 +65,7 @@ func main() {
 		defer req.Body.Close()
 		r, _ := http.DefaultClient.Do(req)
 
-		_, _ = io.ReadAll(r.Body)
+		resp, _ := io.ReadAll(r.Body)
+		fmt.Println(string(resp))
 	}
 }
