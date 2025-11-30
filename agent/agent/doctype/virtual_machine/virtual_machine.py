@@ -66,36 +66,30 @@ class VirtualMachine(Document):
 
 			call_to_agent = ComputeCall(self.agent)
 			doc_dict = call_to_agent.create_doc("Virtual Machine", self.as_dict())
-			frappe.msgprint(f"{doc_dict}")
 			self.update(doc_dict)
 		else:
 			self.apply_config()
 			self.set_state()
 
 	def validate(self):
+		if self.polled:
+			return
 		self.validate_root_device_exists()
 
-	def validate_root_device_exists(self):
-		for disk in self.disks:
-			if disk.device == "vda":
-				if not frappe.db.get_value("Disk", disk.disk, "is_primary_disk"):
-					frappe.throw(_("Disk {} should be a system image disk.").format(disk.disk))
-
-				return
-		frappe.throw(_("Could not find a disk as the device 'vda'"))
-
-
 	def on_change(self):
+		if self.polled:
+			return
 		if is_orchestrator():
 			from orchestrator.orchestrator_mapper.api import ComputeCall
 
 			call_to_agent = ComputeCall(self.agent)
 			doc_dict = call_to_agent.update_doc("Virtual Machine", self.name, self.as_dict())
-			frappe.msgprint(f"{doc_dict}")
-			self.update(doc_dict)
+			try:
+				self.update(doc_dict)
+			except Exception as e:
+				print(doc_dict, e)
+				pass
 		else:
-			if self.polled:
-				return
 			doc_before_save = self.get_doc_before_save()
 
 			# check for state change
@@ -124,9 +118,14 @@ class VirtualMachine(Document):
 						path = disk_doc.file_path
 						self.attach_disk(path, disk[1])
 
+	def validate_root_device_exists(self):
+		for disk in self.disks:
+			if disk.device == "vda":
+				if not frappe.db.get_value("Disk", disk.disk, "is_primary_disk"):
+					frappe.throw(_("Disk {} should be a system image disk.").format(disk.disk))
 
-	def on_cancel(self):
-		self.domain.undefine()
+				return
+		frappe.throw(_("Could not find a disk as the device 'vda'"))
 
 	def set_state(self):
 		try:
