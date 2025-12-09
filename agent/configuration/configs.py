@@ -10,7 +10,7 @@ XML_CONFIG = """<domain type='kvm'>
   <currentMemory unit='KiB'>524288</currentMemory>
   <vcpu placement='static'>1</vcpu>
   <os>
-    <type arch='x86_64' machine='pc-q35-10.1'>hvm</type>
+    <type arch='x86_64' machine='q35'>hvm</type>
     <boot dev='cdrom'/>
     <bootmenu enable='yes'/>
   </os>
