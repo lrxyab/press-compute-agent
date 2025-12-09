@@ -7,6 +7,7 @@
  "engine": "InnoDB",
  "field_order": [
   "size",
+  "virtual_machine_image",
   "is_primary_disk",
   "uuid",
   "column_break_ztmf",
@@ -42,12 +43,20 @@
    "fieldtype": "Data",
    "label": "File Path",
    "read_only": 1
+  },
+  {
+   "depends_on": "eval: doc.is_primary_disk",
+   "fieldname": "virtual_machine_image",
+   "fieldtype": "Link",
+   "label": "Virtual Machine Image",
+   "mandatory_depends_on": "eval: doc.is_primary_disk",
+   "options": "Virtual Machine Image"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-11-18 16:42:49.085315",
+ "modified": "2025-12-09 12:03:06.428375",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Disk",

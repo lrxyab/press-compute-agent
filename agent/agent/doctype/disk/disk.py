@@ -26,6 +26,7 @@ class Disk(Document):
 		is_primary_disk: DF.Check
 		size: DF.Float
 		uuid: DF.Data | None
+		virtual_machine_image: DF.Link | None
 	# end: auto-generated types
 
 	def __init__(self, *args, **kwargs):
@@ -52,7 +53,9 @@ class Disk(Document):
 		return os.path.join(DISKS_ROOT, self.uuid + ".qcow2")
 
 	def create_system_image(self):
-		shutil.copy(os.path.join(CONFIG_PATH, "images", "base.qcow2"), self.file_path)
+		base_image_path = frappe.db.get_value("Virtual Machine Image", self.virtual_machine_image, "file_path")
+
+		shutil.copy(base_image_path, self.file_path)
 
 	def create_disk(self):
 		# TODO: find a way to do this without subprocess calls
