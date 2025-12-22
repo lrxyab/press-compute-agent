@@ -5,7 +5,8 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "is_orchestrator"
+  "is_orchestrator",
+  "default_network_interface"
  ],
  "fields": [
   {
@@ -14,13 +15,22 @@
    "fieldname": "is_orchestrator",
    "fieldtype": "Check",
    "label": "Is Orchestrator"
+  },
+  {
+   "depends_on": "eval:!doc.is_orchestrator",
+   "description": "The default network interface of the host machine",
+   "fieldname": "default_network_interface",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Default Network Interface",
+   "mandatory_depends_on": "eval:!doc.is_orchestrator"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-11-25 13:17:58.325844",
+ "modified": "2025-12-18 16:54:03.820115",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Compute Settings",

@@ -14,11 +14,12 @@ class NetworkInterface(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
+		mac_address: DF.Data | None
 		name1: DF.Data
 		parent: DF.Data
 		parentfield: DF.Data
 		parenttype: DF.Data
-		type: DF.Literal["Network", "Bridge"]
+		type: DF.Literal["Network", "Bridge", "Direct"]
 	# end: auto-generated types
 
 	pass

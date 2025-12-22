@@ -14,6 +14,7 @@ class ComputeSettings(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
+		default_network_interface: DF.Data | None
 		is_orchestrator: DF.Check
 	# end: auto-generated types
 

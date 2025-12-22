@@ -64,4 +64,7 @@ class Disk(Document):
 		except Exception as e:
 			frappe.throw(_("Failed to create disk: {}").format(e))
 
-
+	def after_delete(self):
+		if is_orchestrator():
+			return
+		os.remove(self.file_path)

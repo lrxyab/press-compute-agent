@@ -8,6 +8,9 @@ from frappe.model.document import Document
 from xml.dom import minidom
 from frappe.utils.caching import redis_cache
 import libvirt
+import tempfile
+import subprocess
+import shutil
 
 import os
 from agent.configuration.configs import XML_CONFIG
@@ -15,7 +18,6 @@ from agent.configuration.paths import CONFIG_PATH
 from agent.configuration.connections import libvirt_connection
 from agent.utils import is_orchestrator
 from uuid import uuid4
-
 
 DOMAIN_STATE_MAP = {0: "Undefined",
 					1: "Running",
@@ -83,7 +85,10 @@ class VirtualMachine(Document):
 			from orchestrator.orchestrator_mapper.api import ComputeCall
 
 			call_to_agent = ComputeCall(self.agent)
-			doc_dict = call_to_agent.update_doc("Virtual Machine", self.name, self.as_dict())
+			try:
+				doc_dict = call_to_agent.update_doc("Virtual Machine", self.name, self.as_dict())
+			except:
+				return
 			try:
 				self.update(doc_dict)
 			except Exception as e:
@@ -230,21 +235,54 @@ class VirtualMachine(Document):
 		#TODO: add condition for all types. currently only using bridges
 		devices = self.xml.getElementsByTagName("devices")[0]
 		for network_interface in self.network_interfaces:
-			interface = self.xml.createElement("interface")
-			interface.setAttribute("type", "bridge")
+			match network_interface.type:
+				case "Network":
+					interface = self.xml.createElement("interface")
+					interface.setAttribute("type", "network")
 
-			source = self.xml.createElement("source")
-			source.setAttribute("bridge", network_interface.name1)
-			interface.appendChild(source)
+					source = self.xml.createElement("source")
+					source.setAttribute("network", "default")
+					interface.appendChild(source)
 
-			vport = self.xml.createElement("virtualport")
-			vport.setAttribute("type", "openvswitch")
-			interface.appendChild(vport)
+					model = self.xml.createElement("model")
+					model.setAttribute("type", "virtio")
+					interface.appendChild(model)
+					devices.appendChild(interface)
+				case "Bridge":
+					interface = self.xml.createElement("interface")
+					interface.setAttribute("type", "bridge")
 
-			model = self.xml.createElement("model")
-			model.setAttribute("type", "virtio")
-			interface.appendChild(model)
-			devices.appendChild(interface)
+					source = self.xml.createElement("source")
+					source.setAttribute("bridge", network_interface.name1)
+					interface.appendChild(source)
+
+					vport = self.xml.createElement("virtualport")
+					vport.setAttribute("type", "openvswitch")
+					interface.appendChild(vport)
+
+					model = self.xml.createElement("model")
+					model.setAttribute("type", "virtio")
+					interface.appendChild(model)
+					devices.appendChild(interface)
+				case "Direct":
+					interface = self.xml.createElement("interface")
+					interface.setAttribute("type", "direct")
+
+					mac = self.xml.createElement("mac")
+					mac.setAttribute("address", network_interface.mac_address)
+					interface.appendChild(mac)
+
+					source = self.xml.createElement("source")
+					source.setAttribute("dev", network_interface.name1)
+					source.setAttribute("mode", "bridge")
+					interface.appendChild(source)
+
+					model = self.xml.createElement("model")
+					model.setAttribute("type", "e1000")
+					interface.appendChild(model)
+
+					devices.appendChild(interface)
+
 
 	def attach_disk(self, disk: str, dev: str):
 		xml = generate_disk_xml(disk, dev)
@@ -270,8 +308,61 @@ class VirtualMachine(Document):
 				os.remove(disk_path)
 				break
 	def get_image_path(self):
-		return os.path.join(CONFIG_PATH, "disks", f"{self.name}.qcow2")
+		for disk in self.disks:
+			if disk.device == "vda":
+				disk = frappe.get_doc("Disk", disk.disk)
+				return disk.get_path()
+		return ""
 
+	def apply_image_config(self, cloud_init, ip_address):
+		workdir = tempfile.mkdtemp(prefix="nocloud-")
+
+		# cloud-init section
+		user_data_path = os.path.join(workdir, "user-data")
+		meta_data_path = os.path.join(workdir, "meta-data")
+		print(cloud_init)
+
+		with open(user_data_path, "w") as f:
+			f.write(cloud_init)
+
+		with open(meta_data_path, "w") as f:
+			f.write(f"instance-id: {self.uuid}\nlocal-hostname: {self.name}\n")
+
+		# netplan section
+
+		netplan_path = os.path.join(workdir, "01-config.yaml")
+		netplan = f"""
+		network:
+  		version: 2
+  		ethernets:
+    		ens1:
+      		dhcp4: false
+      		addresses:
+        		- {ip_address}/32
+      		gateway4: 62.210.0.1
+      		nameservers:
+        		addresses:
+          		- 51.159.47.28
+          		- 51.159.47.26
+		"""
+
+		with open(netplan_path, "w") as f:
+			f.write(netplan)
+
+		image_path = self.get_image_path()
+		try:
+			subprocess.run([
+				"virt-customize",
+				"-a", image_path,
+				"--mkdir", "/var/lib/cloud/seed/nocloud",
+				"--upload", f"{user_data_path}:/var/lib/cloud/seed/nocloud/user-data",
+				"--upload", f"{meta_data_path}:/var/lib/cloud/seed/nocloud/meta-data",
+				"--upload", f"{netplan_path}:/etc/netplan/01-config.yaml",
+			], check=True)
+		except Exception as e:
+			frappe.throw(f"{e}")
+		finally:
+			shutil.rmtree(workdir)
 
 def generate_disk_xml(disk: str, dev: str):
 		# never gonna hardcode xml!
@@ -383,3 +474,41 @@ def parse_machine_details(xml_string: str):
 	out["disks"] = disks
 	# out["network_interfaces"] =
 	return out
+
+#TODO: move to orchestrator
+@frappe.whitelist()
+def new_vm_from_image(name, image, memory, number_of_vcpus, cloud_init, mac_address, ip_address, agent=None):
+	import random
+	if agent == None:
+		agent = random.choice(frappe.db.get_all("Agent", ["name", "default_network_interface"]))
+
+
+	root_volume = frappe.new_doc("Disk")
+	root_volume.is_primary_disk = True
+	root_volume.virtual_machine_image = image
+	root_volume.agent = agent.name
+	root_volume.save()
+
+	vm = frappe.new_doc("Virtual Machine")
+	vm.name = name
+	vm.memory = memory
+	vm.number_of_vcpus = number_of_vcpus
+	vm.agent = agent.name
+
+	vm.append("disks", {
+		"disk": root_volume.name,
+		"device": "vda",
+	})
+	vm.append("network_interfaces", {
+		"name1": agent.default_network_interface,
+		"type": "Direct",
+		"mac_address": mac_address,
+	})
+	vm.insert()
+
+	vm.load_from_db()
+	vm.apply_image_config(cloud_init, ip_address)
+	vm.apply_network_config()
+	# vm.load_from_db()
+	# vm.state = "Running"
+	# vm.save()

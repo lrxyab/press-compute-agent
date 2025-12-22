@@ -2,8 +2,8 @@
 # For license information, please see license.txt
 
 # import frappe
+from agent.utils import is_orchestrator
 from frappe.model.document import Document
-from agent.configuration.connections import libvirt_connection
 
 
 class VirtualMachineImage(Document):
@@ -20,3 +20,16 @@ class VirtualMachineImage(Document):
 	# end: auto-generated types
 
 	pass
+	def before_insert(self):
+		if is_orchestrator():
+			from orchestrator.orchestrator_mapper.api import ComputeCall
+			call_to_agent = ComputeCall(self.agent)
+			doc_dict = call_to_agent.create_doc(self.doctype, self.as_dict())
+			self.update(doc_dict)
+
+	def on_change(self):
+		if is_orchestrator():
+			from orchestrator.orchestrator_mapper.api import ComputeCall
+			call_to_agent = ComputeCall(self.agent)
+			doc_dict = call_to_agent.update_doc(self.doctype, self.name, self.as_dict())
+			self.update(doc_dict)
