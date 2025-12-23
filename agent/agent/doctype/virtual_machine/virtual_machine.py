@@ -164,6 +164,22 @@ class VirtualMachine(Document):
 		self.domain.suspend()
 		self.state = "Paused"
 
+	#TODO: Maybe enqueue??
+	@frappe.whitelist()
+	def reboot(self):
+		import time
+		if self.domain.isActive():
+			self.domain.shutdown()
+		destroyed = False
+		for _ in range(100):
+			time.sleep(0.1)
+			if not self.domain.isActive():
+				destroyed = True
+				break
+		if not destroyed:
+			frappe.throw("Virtual Machine could not be shut down to be rebooted.")
+		self.domain.create()
+
 	def apply_config(self):
 
 		self.xml = get_new_config()
