@@ -144,6 +144,7 @@ class VirtualMachine(Document):
 		except:
 			pass
 
+	@frappe.whitelist()
 	def start(self):
 		state, _ = self.domain.state()
 		# 0 is undefined
@@ -156,10 +157,12 @@ class VirtualMachine(Document):
 				self.domain.resume()
 		self.state = "Running"
 
+	@frappe.whitelist()
 	def stop(self):
 		self.domain.shutdown()
 		self.state = "Stopped"
 
+	@frappe.whitelist()
 	def pause(self):
 		self.domain.suspend()
 		self.state = "Paused"
