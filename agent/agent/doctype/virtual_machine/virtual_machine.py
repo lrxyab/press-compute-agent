@@ -356,6 +356,14 @@ class VirtualMachine(Document):
 	def get_volumes(self):
 		return {disk.disk: disk.device for disk in self.disks}
 
+	# volumes should be of the format {"disk": <disk_name>, "device": <device_name>}
+	@frappe.whitelist()
+	def attach_volumes(self, volumes):
+		for volume in volumes:
+			self.append("disks", volume)
+		self.save()
+		return self.load_from_db().as_dict()
+
 	def apply_image_config(self, cloud_init, ip_address):
 		workdir = tempfile.mkdtemp(prefix="nocloud-")
 
