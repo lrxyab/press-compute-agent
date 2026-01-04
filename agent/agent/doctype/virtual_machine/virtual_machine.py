@@ -178,14 +178,7 @@ class VirtualMachine(Document):
 
 	def _reboot(self):
 
-		# prevent multiple reboots at the same time.
-		reboot_lock_key = f"{self.name}-reboot-lock"
-		reboot_lock = frappe.cache.get_value(reboot_lock_key)
-
-		if reboot_lock:
-			raise RebootLockedException
-
-		frappe.cache.set_value(reboot_lock_key, True, expires_in_sec=600)
+		self.reboot_lock_acquire()
 
 		try:
 			import time
@@ -204,7 +197,7 @@ class VirtualMachine(Document):
 			raise RebootFailedException
 
 		finally:
-			frappe.cache.set_value(reboot_lock_key, False)
+			self.reboot_lock_release()
 
 
 	@frappe.whitelist()
@@ -422,6 +415,22 @@ class VirtualMachine(Document):
 			frappe.throw(f"{e}")
 		finally:
 			shutil.rmtree(workdir)
+
+	@property
+	def reboot_lock_key(self):
+		return f"{self.name}-reboot-lock"
+
+	def reboot_lock_acquire(self):
+		if self.get_reboot_lock():
+			raise RebootLockedException
+		else:
+			frappe.cache.set_value(self.reboot_lock_key, True, expires_in_sec=600)
+
+	def reboot_lock_release(self):
+		frappe.cache.set_value(self.reboot_lock_key, False)
+
+	def get_reboot_lock(self):
+		return frappe.cache.get_value(self.reboot_lock_key)
 
 def generate_disk_xml(disk: str, dev: str):
 		# never gonna hardcode xml!
