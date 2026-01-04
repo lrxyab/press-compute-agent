@@ -167,14 +167,12 @@ class VirtualMachine(Document):
 		self.domain.suspend()
 		self.state = "Paused"
 
-	#TODO: Maybe enqueue??
-	@frappe.whitelist()
-	def reboot(self):
+	def _reboot(self):
 		import time
 		if self.domain.isActive():
 			self.domain.shutdown()
 		destroyed = False
-		for _ in range(100):
+		while True:
 			time.sleep(0.1)
 			if not self.domain.isActive():
 				destroyed = True
@@ -182,6 +180,10 @@ class VirtualMachine(Document):
 		if not destroyed:
 			frappe.throw("Virtual Machine could not be shut down to be rebooted.")
 		self.domain.create()
+
+	@frappe.whitelist()
+	def reboot(self):
+		frappe.enqueue_doc("Virtual Machine", self.name, "_reboot")
 
 	def apply_config(self):
 
