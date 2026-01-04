@@ -133,18 +133,18 @@ class VirtualMachine(Document):
 		frappe.throw(_("Could not find a disk as the device 'vda'"))
 
 	def set_state(self):
-		try:
-			match self.state:
-				case "Running":
-					self.start()
-				case "Stopped":
-					self.stop()
-				case "Paused":
-					self.pause()
-				case "Undefined":
-					self.undefine()
-		except:
-			pass
+
+		if self.get_reboot_lock():
+			raise RebootLockedException
+		match self.state:
+			case "Running":
+				self.start()
+			case "Stopped":
+				frappe.enqueue_doc("Virtual Machine", self.name, "stop")
+			case "Paused":
+				self.pause()
+			case "Undefined":
+				self.undefine()
 
 	@frappe.whitelist()
 	def start(self):
@@ -161,8 +161,13 @@ class VirtualMachine(Document):
 
 	@frappe.whitelist()
 	def stop(self):
+		self.reboot_lock_acquire()
 		self.domain.shutdown()
+		while True:
+			if not self.domain.isActive():
+				break
 		self.state = "Stopped"
+		self.reboot_lock_release()
 
 	@frappe.whitelist()
 	def pause(self):
