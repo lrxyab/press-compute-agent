@@ -141,6 +141,8 @@ class VirtualMachine(Document):
 					self.stop()
 				case "Paused":
 					self.pause()
+				case "Undefined":
+					self.undefine()
 		except:
 			pass
 
@@ -166,6 +168,13 @@ class VirtualMachine(Document):
 	def pause(self):
 		self.domain.suspend()
 		self.state = "Paused"
+
+	@frappe.whitelist()
+	def undefine(self):
+		if self.domain.isActive():
+			self.domain.destroy()
+		else:
+			self.domain.undefine()
 
 	def _reboot(self):
 
