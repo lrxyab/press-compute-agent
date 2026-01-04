@@ -352,6 +352,10 @@ class VirtualMachine(Document):
 				return disk.get_path()
 		return ""
 
+	@frappe.whitelist()
+	def get_volumes(self):
+		return {disk.disk: disk.device for disk in self.disks}
+
 	def apply_image_config(self, cloud_init, ip_address):
 		workdir = tempfile.mkdtemp(prefix="nocloud-")
 
