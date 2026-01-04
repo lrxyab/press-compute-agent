@@ -168,18 +168,35 @@ class VirtualMachine(Document):
 		self.state = "Paused"
 
 	def _reboot(self):
-		import time
-		if self.domain.isActive():
-			self.domain.shutdown()
-		destroyed = False
-		while True:
-			time.sleep(0.1)
-			if not self.domain.isActive():
-				destroyed = True
-				break
-		if not destroyed:
-			frappe.throw("Virtual Machine could not be shut down to be rebooted.")
-		self.domain.create()
+
+		# prevent multiple reboots at the same time.
+		reboot_lock_key = f"{self.name}-reboot-lock"
+		reboot_lock = frappe.cache.get_value(reboot_lock_key)
+
+		if reboot_lock:
+			raise RebootLockedException
+
+		frappe.cache.set_value(reboot_lock_key, True, expires_in_sec=600)
+
+		try:
+			import time
+			if self.domain.isActive():
+				self.domain.shutdown()
+			destroyed = False
+			while True:
+				time.sleep(0.1)
+				if not self.domain.isActive():
+					destroyed = True
+					break
+			if not destroyed:
+				frappe.throw("Virtual Machine could not be shut down to be rebooted.")
+			self.domain.create()
+		except:
+			raise RebootFailedException
+
+		finally:
+			frappe.cache.set_value(reboot_lock_key, False)
+
 
 	@frappe.whitelist()
 	def reboot(self):
@@ -533,3 +550,12 @@ def new_vm_from_image(name, image, memory, number_of_vcpus, cloud_init, mac_addr
 	# vm.load_from_db()
 	# vm.state = "Running"
 	# vm.save()
+
+
+class RebootLockedException(Exception):
+	def __init__(self):
+		pass
+
+class RebootFailedException(Exception):
+	def __init__(self):
+		pass
