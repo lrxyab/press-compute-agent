@@ -286,7 +286,7 @@ class VirtualMachine(Document):
 					interface.setAttribute("type", "network")
 
 					source = self.xml.createElement("source")
-					source.setAttribute("network", "default")
+					source.setAttribute("network", network_interface.name1)
 					interface.appendChild(source)
 
 					model = self.xml.createElement("model")
@@ -327,6 +327,25 @@ class VirtualMachine(Document):
 					interface.appendChild(model)
 
 					devices.appendChild(interface)
+
+		private_networks = frappe.get_all("Private Network Machines", filters={"virtual_machine": self.name}, fields=["*"])
+		print(private_networks)
+		for private_network in private_networks:
+				interface = self.xml.createElement("interface")
+				interface.setAttribute("type", "network")
+
+				source = self.xml.createElement("source")
+				source.setAttribute("network", private_network.parent)
+				interface.appendChild(source)
+
+				mac = self.xml.createElement("mac")
+				source.setAttribute("address", private_network.mac_address)
+				interface.appendChild(mac)
+
+				model = self.xml.createElement("model")
+				model.setAttribute("type", "virtio")
+				interface.appendChild(model)
+				devices.appendChild(interface)
 
 
 	def attach_disk(self, disk: str, dev: str):
