@@ -176,10 +176,11 @@ class VirtualMachine(Document):
 
 	@frappe.whitelist()
 	def undefine(self):
-		if self.domain.isActive():
-			self.domain.destroy()
-		else:
-			self.domain.undefine()
+		if self.domain:
+			if self.domain.isActive():
+				self.domain.destroy()
+			else:
+				self.domain.undefine()
 
 	def _reboot(self):
 
