@@ -31,7 +31,11 @@ class PrivateNetwork(Document):
 	def on_change(self):
 		# libvirt_connection.networkDefineXML()
 		network_config = self.get_config()
-		libvirt_connection.networkDefineXML(network_config)
+		network = libvirt_connection.networkDefineXML(network_config)
+		if not network.isActive():
+			network.create()
+
+		network.setAutostart(True)
 
 	def apply_config(self):
 		pass
