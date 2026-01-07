@@ -1,32 +1,34 @@
 # Copyright (c) 2025, ayush@frappe.io and contributors
 # For license information, please see license.txt
 
+import os
+import shutil
+import subprocess
+import tempfile
+from uuid import uuid4
+from xml.dom import minidom
+
 import frappe
+import libvirt
 from frappe import _
 from frappe.model.document import Document
-
-from xml.dom import minidom
 from frappe.utils.caching import redis_cache
-import libvirt
-import tempfile
-import subprocess
-import shutil
 
-import os
 from agent.configuration.configs import XML_CONFIG
-from agent.configuration.paths import CONFIG_PATH
 from agent.configuration.connections import libvirt_connection
+from agent.configuration.paths import CONFIG_PATH
 from agent.utils import is_orchestrator
-from uuid import uuid4
 
-DOMAIN_STATE_MAP = {0: "Undefined",
-					1: "Running",
-					3: "Paused",
-					4: "Stopped",
-					5: "Stopped",
-					6: "Stopped",
-					7: "Paused",
-					}
+DOMAIN_STATE_MAP = {
+	0: "Undefined",
+	1: "Running",
+	3: "Paused",
+	4: "Stopped",
+	5: "Stopped",
+	6: "Stopped",
+	7: "Paused",
+}
+
 
 class VirtualMachine(Document):
 	# begin: auto-generated types
@@ -35,9 +37,10 @@ class VirtualMachine(Document):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
+		from frappe.types import DF
+
 		from agent.agent.doctype.network_interface.network_interface import NetworkInterface
 		from agent.agent.doctype.vm_disk.vm_disk import VMDisk
-		from frappe.types import DF
 
 		disks: DF.Table[VMDisk]
 		memory: DF.Float
@@ -107,8 +110,10 @@ class VirtualMachine(Document):
 				try:
 					self.set_state()
 				except Exception as e:
-					frappe.msgprint(_("""There was an error {} while updating the state. Fetching the
-						state of the virtual machine""").format(e))
+					frappe.msgprint(
+						_("""There was an error {} while updating the state. Fetching the
+						state of the virtual machine""").format(e)
+					)
 
 				# hacky way to declaratively apply disks
 				prev_disks = set([(disk.disk, disk.device) for disk in doc_before_save.disks])
@@ -133,7 +138,6 @@ class VirtualMachine(Document):
 		frappe.throw(_("Could not find a disk as the device 'vda'"))
 
 	def set_state(self):
-
 		if self.get_reboot_lock():
 			raise RebootLockedException
 		match self.state:
@@ -183,11 +187,11 @@ class VirtualMachine(Document):
 				self.domain.undefine()
 
 	def _reboot(self):
-
 		self.reboot_lock_acquire()
 
 		try:
 			import time
+
 			if self.domain.isActive():
 				self.domain.shutdown()
 			destroyed = False
@@ -205,13 +209,11 @@ class VirtualMachine(Document):
 		finally:
 			self.reboot_lock_release()
 
-
 	@frappe.whitelist()
 	def reboot(self):
 		frappe.enqueue_doc("Virtual Machine", self.name, "_reboot")
 
 	def apply_config(self):
-
 		self.xml = get_new_config()
 		self.create_config()
 		dom = libvirt_connection.defineXMLFlags(self.xml.toxml())
@@ -276,9 +278,8 @@ class VirtualMachine(Document):
 			devices.appendChild(disk_elem)
 		self.device_config = devices
 
-
 	def create_network_interface_config(self):
-		#TODO: add condition for all types. currently only using bridges
+		# TODO: add condition for all types. currently only using bridges
 		devices = self.xml.getElementsByTagName("devices")[0]
 		for network_interface in self.network_interfaces:
 			match network_interface.type:
@@ -329,25 +330,26 @@ class VirtualMachine(Document):
 
 					devices.appendChild(interface)
 
-		private_networks = frappe.get_all("Private Network Machines", filters={"virtual_machine": self.name}, fields=["*"])
+		private_networks = frappe.get_all(
+			"Private Network Machines", filters={"virtual_machine": self.name}, fields=["*"]
+		)
 		print(private_networks)
 		for private_network in private_networks:
-				interface = self.xml.createElement("interface")
-				interface.setAttribute("type", "network")
+			interface = self.xml.createElement("interface")
+			interface.setAttribute("type", "network")
 
-				source = self.xml.createElement("source")
-				source.setAttribute("network", private_network.parent)
-				interface.appendChild(source)
+			source = self.xml.createElement("source")
+			source.setAttribute("network", private_network.parent)
+			interface.appendChild(source)
 
-				mac = self.xml.createElement("mac")
-				source.setAttribute("address", private_network.mac_address)
-				interface.appendChild(mac)
+			mac = self.xml.createElement("mac")
+			source.setAttribute("address", private_network.mac_address)
+			interface.appendChild(mac)
 
-				model = self.xml.createElement("model")
-				model.setAttribute("type", "virtio")
-				interface.appendChild(model)
-				devices.appendChild(interface)
-
+			model = self.xml.createElement("model")
+			model.setAttribute("type", "virtio")
+			interface.appendChild(model)
+			devices.appendChild(interface)
 
 	def attach_disk(self, disk: str, dev: str):
 		xml = generate_disk_xml(disk, dev)
@@ -360,8 +362,7 @@ class VirtualMachine(Document):
 		for disk in xml.getElementsByTagName("disk"):
 			disk_dev = disk.getElementsByTagName("target")[0].getAttribute("dev")
 			if disk_dev == dev:
-				self.domain.detachDeviceFlags(disk.toxml(),
-					libvirt.VIR_DOMAIN_AFFECT_LIVE)
+				self.domain.detachDeviceFlags(disk.toxml(), libvirt.VIR_DOMAIN_AFFECT_LIVE)
 
 	def delete_disk(self, dev: str):
 		xml_string = self.domain.XMLDesc()
@@ -372,6 +373,7 @@ class VirtualMachine(Document):
 				disk_path = disk.getElementsByTagName("source")[0].getAttribute("file")
 				os.remove(disk_path)
 				break
+
 	def get_image_path(self):
 		for disk in self.disks:
 			if disk.device == "vda":
@@ -381,7 +383,7 @@ class VirtualMachine(Document):
 
 	@frappe.whitelist()
 	def get_volumes(self):
-		return {disk.disk: disk.device for disk in self.disks}
+		return [{"id": disk.disk, "linux_device": "/dev/" + disk.device, "size": 1} for disk in self.disks]
 
 	# volumes should be of the format {"disk": <disk_name>, "device": <device_name>}
 	@frappe.whitelist()
@@ -405,36 +407,44 @@ class VirtualMachine(Document):
 		with open(meta_data_path, "w") as f:
 			f.write(f"instance-id: {self.uuid}\nlocal-hostname: {self.name}\n")
 
-		# netplan section
-		netplan_path = os.path.join(workdir, "01-config.yaml")
-		netplan = f"""
-		network:
-  		version: 2
-  		ethernets:
-    		ens1:
-      		dhcp4: false
-      		addresses:
-        		- {ip_address}/32
-      		gateway4: 62.210.0.1
-      		nameservers:
-        		addresses:
-          		- 51.159.47.28
-          		- 51.159.47.26
-		"""
+		# # netplan section
+		# netplan_path = os.path.join(workdir, "01-config.yaml")
+		# netplan = f"""
+		# network:
+		# 		version: 2
+		# 		ethernets:
+		#   		ens1:
+		#     		dhcp4: false
+		#     		addresses:
+		#       		- {ip_address}/32
+		#     		gateway4: 62.210.0.1
+		#     		nameservers:
+		#       		addresses:
+		#         		- 51.159.47.28
+		#         		- 51.159.47.26
+		# """
 
-		with open(netplan_path, "w") as f:
-			f.write(netplan)
+		# with open(netplan_path, "w") as f:
+		# 	f.write(netplan)
 
 		image_path = self.get_image_path()
 		try:
-			subprocess.run([
-				"virt-customize",
-				"-a", image_path,
-				"--mkdir", "/var/lib/cloud/seed/nocloud",
-				"--upload", f"{user_data_path}:/var/lib/cloud/seed/nocloud/user-data",
-				"--upload", f"{meta_data_path}:/var/lib/cloud/seed/nocloud/meta-data",
-				"--upload", f"{netplan_path}:/etc/netplan/01-config.yaml",
-			], check=True)
+			subprocess.run(
+				[
+					"virt-customize",
+					"-a",
+					image_path,
+					"--mkdir",
+					"/var/lib/cloud/seed/nocloud",
+					"--upload",
+					f"{user_data_path}:/var/lib/cloud/seed/nocloud/user-data",
+					"--upload",
+					f"{meta_data_path}:/var/lib/cloud/seed/nocloud/meta-data",
+					# "--upload",
+					# f"{netplan_path}:/etc/netplan/01-config.yaml",
+				],
+				check=True,
+			)
 		except Exception as e:
 			frappe.throw(f"{e}")
 		finally:
@@ -456,38 +466,40 @@ class VirtualMachine(Document):
 	def get_reboot_lock(self):
 		return frappe.cache.get_value(self.reboot_lock_key)
 
+
 def generate_disk_xml(disk: str, dev: str):
-		# never gonna hardcode xml!
-		# TODO: generalise for other devices when required in the future
+	# never gonna hardcode xml!
+	# TODO: generalise for other devices when required in the future
 
-		doc = minidom.Document()
-		disk_element = doc.createElement("disk")
-		doc.appendChild(disk_element)
-		disk_element.setAttribute("type", "file")
-		disk_element.setAttribute("device", "disk")
+	doc = minidom.Document()
+	disk_element = doc.createElement("disk")
+	doc.appendChild(disk_element)
+	disk_element.setAttribute("type", "file")
+	disk_element.setAttribute("device", "disk")
 
-		driver_element = doc.createElement("driver")
-		disk_element.appendChild(driver_element)
-		driver_element.setAttribute("name", "qemu")
-		driver_element.setAttribute("type", "qcow2")
+	driver_element = doc.createElement("driver")
+	disk_element.appendChild(driver_element)
+	driver_element.setAttribute("name", "qemu")
+	driver_element.setAttribute("type", "qcow2")
 
-		source_element = doc.createElement("source")
-		disk_element.appendChild(source_element)
-		source_element.setAttribute("file", disk)
+	source_element = doc.createElement("source")
+	disk_element.appendChild(source_element)
+	source_element.setAttribute("file", disk)
 
-		target = doc.createElement("target")
-		disk_element.appendChild(target)
-		target.setAttribute("dev", dev)
-		target.setAttribute("bus", "virtio")
+	target = doc.createElement("target")
+	disk_element.appendChild(target)
+	target.setAttribute("dev", dev)
+	target.setAttribute("bus", "virtio")
 
-		return disk_element.toxml()
+	return disk_element.toxml()
+
 
 def get_new_config():
-		xml = minidom.parseString(XML_CONFIG)
-		return xml
+	xml = minidom.parseString(XML_CONFIG)
+	return xml
 
 
-#TODO: better, consistent naming
+# TODO: better, consistent naming
 @frappe.whitelist(methods=["POST"], allow_guest=True)
 def update_details(vm_details=[]):
 	disks_map = get_all_disks()
@@ -498,14 +510,13 @@ def update_details(vm_details=[]):
 	for undefined_vm in all_vms.difference(defined_vms):
 		frappe.db.set_value("Virtual Machine", undefined_vm, "state", "Undefined")
 
-
 	for vm_detail in vm_details:
 		if frappe.db.exists("Virtual Machine", vm_detail["name"]):
 			vm_doc = frappe.get_doc("Virtual Machine", vm_detail["name"])
 		else:
 			continue
 
-		new_vm_memory = int(vm_detail["memory"])/(1024*1024)
+		new_vm_memory = int(vm_detail["memory"]) / (1024 * 1024)
 		if vm_doc.memory != new_vm_memory:
 			vm_doc.db_set("memory", new_vm_memory)
 		if vm_doc.number_of_vcpus != vm_detail["vcpus"]:
@@ -520,18 +531,19 @@ def update_details(vm_details=[]):
 			try:
 				name = disks_map[vm_detail_disk["file_path"]]
 				true_vm_disks.append({"disk": name, "device": vm_detail_disk["device"]})
-			except:
+			except Exception as e:
 				continue
 
 		vm_disks = [{"disk": i.name, "device": i.device} for i in vm_doc.disks]
 
-		if sorted([(i["disk"], i["device"]) for i in vm_disks]) != sorted([(i["disk"], i["device"]) for i in true_vm_disks]):
+		if sorted([(i["disk"], i["device"]) for i in vm_disks]) != sorted(
+			[(i["disk"], i["device"]) for i in true_vm_disks]
+		):
 			vm_doc.polled = True
 			vm_doc.disks = []
 			for true_vm_disk in true_vm_disks:
 				vm_doc.append("disks", true_vm_disk)
 			vm_doc.save(ignore_permissions=True)
-
 
 
 @redis_cache(ttl=10)
@@ -541,13 +553,9 @@ def get_all_disks():
 	disks_map = {i.file_path: i.name for i in query.run(as_dict=True)}
 	return disks_map
 
+
 def parse_machine_details(xml_string: str):
-	out = {
-		"memory": 0,
-		"vcpus": 0,
-		"disks": [],
-		"network_devices": []
-	}
+	out = {"memory": 0, "vcpus": 0, "disks": [], "network_devices": []}
 
 	xml = minidom.parseString(xml_string)
 	vcpus = int(xml.getElementsByTagName("vcpu")[0].childNodes[0].nodeValue)
@@ -560,40 +568,51 @@ def parse_machine_details(xml_string: str):
 		dev = disk_element.getElementsByTagName("target")[0].getAttribute("dev")
 		disks.append({"name": disk_name, "path": file_path, "dev": dev})
 
-
 	out["vcpus"] = vcpus
 	out["memory"] = memory / (1024 * 1024)
 	out["disks"] = disks
 	# out["network_interfaces"] =
 	return out
 
-#TODO: move to orchestrator
-@frappe.whitelist()
-def new_vm_from_image(name, image, memory, number_of_vcpus, cloud_init, mac_address, ip_address,
-					  agent=None, private_network=None):
-	import random
-	if agent == None:
-		agent = random.choice(frappe.db.get_all("Agent", ["name", "default_network_interface"]))
 
+# TODO: move to orchestrator
+@frappe.whitelist()
+def new_vm_from_image(
+	name,
+	image,
+	memory,
+	number_of_vcpus,
+	cloud_init,
+	mac_address,
+	ip_address,
+	agent=None,
+	private_network=None,
+):
+	# import random
+	# if agent == None:
+	# 	agent = random.choice(frappe.db.get_all("Agent", ["name", "default_network_interface"]))
 
 	root_volume = frappe.new_doc("Disk")
 	root_volume.is_primary_disk = True
 	root_volume.virtual_machine_image = image
-	root_volume.agent = agent.name
-	root_volume.save()
+	# root_volume.agent = agent.name
+	root_volume.insert()
 
 	vm = frappe.new_doc("Virtual Machine")
 	vm.name = name
 	vm.memory = memory
 	vm.number_of_vcpus = number_of_vcpus
-	vm.agent = agent.name
+	# vm.agent = agent.name
 
-	vm.append("disks", {
-		"disk": root_volume.name,
-		"device": "vda",
-	})
+	vm.append(
+		"disks",
+		{
+			"disk": root_volume.name,
+			"device": "vda",
+		},
+	)
 	vm.append("network_interfaces", {
-		"name1": agent.default_network_interface,
+		"name1": "enp65s0f0",
 		"type": "Direct",
 		"mac_address": mac_address,
 	})
@@ -603,13 +622,14 @@ def new_vm_from_image(name, image, memory, number_of_vcpus, cloud_init, mac_addr
 	vm.apply_image_config(cloud_init, ip_address)
 
 	# vm.load_from_db()
-	# vm.state = "Running"
-	# vm.save()
+	vm.state = "Running"
+	vm.save()
 
 
 class RebootLockedException(Exception):
 	def __init__(self):
 		pass
+
 
 class RebootFailedException(Exception):
 	def __init__(self):
