@@ -406,7 +406,6 @@ class VirtualMachine(Document):
 			f.write(f"instance-id: {self.uuid}\nlocal-hostname: {self.name}\n")
 
 		# netplan section
-
 		netplan_path = os.path.join(workdir, "01-config.yaml")
 		netplan = f"""
 		network:
@@ -570,7 +569,8 @@ def parse_machine_details(xml_string: str):
 
 #TODO: move to orchestrator
 @frappe.whitelist()
-def new_vm_from_image(name, image, memory, number_of_vcpus, cloud_init, mac_address, ip_address, agent=None):
+def new_vm_from_image(name, image, memory, number_of_vcpus, cloud_init, mac_address, ip_address,
+					  agent=None, private_network=None):
 	import random
 	if agent == None:
 		agent = random.choice(frappe.db.get_all("Agent", ["name", "default_network_interface"]))
@@ -601,7 +601,7 @@ def new_vm_from_image(name, image, memory, number_of_vcpus, cloud_init, mac_addr
 
 	vm.load_from_db()
 	vm.apply_image_config(cloud_init, ip_address)
-	vm.apply_network_config()
+
 	# vm.load_from_db()
 	# vm.state = "Running"
 	# vm.save()
