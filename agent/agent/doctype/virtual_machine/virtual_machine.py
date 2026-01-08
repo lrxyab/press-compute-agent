@@ -579,8 +579,7 @@ def parse_machine_details(xml_string: str):
 
 
 # TODO: move to orchestrator
-@frappe.whitelist()
-def new_vm_from_image(
+def _new_vm_from_image(
 	name,
 	image,
 	memory,
@@ -628,7 +627,31 @@ def new_vm_from_image(
 	vm.state = "Running"
 	vm.save()
 
+@frappe.whitelist()
+def new_vm_from_image(
+	name,
+	image,
+	memory,
+	number_of_vcpus,
+	cloud_init,
+	mac_address,
+	ip_address,
+	agent=None,
+	private_network=None,
+):
 
+    frappe.enqueue(
+        _new_vm_from_image,
+        name=name,
+        image=image,
+        memory=memory,
+        number_of_vcpus=number_of_vcpus,
+        cloud_init=cloud_init,
+        mac_address=mac_address,
+        ip_address=ip_address,
+        agent=agent,
+        private_network=private_network
+    )
 class RebootLockedException(Exception):
 	def __init__(self):
 		pass
