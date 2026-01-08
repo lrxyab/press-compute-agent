@@ -56,7 +56,8 @@ class VirtualMachine(Document):
 		self.polled = False
 		if self.name:
 			try:
-				self.domain = libvirt_connection.lookupByName(self.name)
+				if self.state != "Undefined":
+					self.domain = libvirt_connection.lookupByName(self.name)
 			except libvirt.libvirtError as e:
 				if e.get_error_code() == libvirt.VIR_ERR_NO_DOMAIN:
 					pass
@@ -73,7 +74,7 @@ class VirtualMachine(Document):
 			doc_dict = call_to_agent.create_doc("Virtual Machine", self.as_dict())
 			self.update(doc_dict)
 		else:
-			self.apply_config()
+			self.domain = self.apply_config()
 			self.set_state()
 
 	def validate(self):
@@ -152,10 +153,14 @@ class VirtualMachine(Document):
 
 	@frappe.whitelist()
 	def start(self):
-		state, _ = self.domain.state()
+		if self.domain:
+			state, _ = self.domain.state()
+		else:
+			state = 0
 		# 0 is undefined
 		match DOMAIN_STATE_MAP[state]:
 			case "Undefined":
+				self.domain = libvirt_connection.defineXMLFlags(self.xml.toxml())
 				self.domain.create()
 			case "Stopped":
 				self.domain.create()
@@ -165,13 +170,22 @@ class VirtualMachine(Document):
 
 	@frappe.whitelist()
 	def stop(self):
-		self.reboot_lock_acquire()
-		self.domain.shutdown()
-		while True:
-			if not self.domain.isActive():
-				break
-		self.state = "Stopped"
-		self.reboot_lock_release()
+		if self.domain:
+			state, _ = self.domain.state()
+		else:
+			state = 0
+
+		match DOMAIN_STATE_MAP[state]:
+			case "Undefined":
+				self.domain = libvirt_connection.defineXMLFlags(self.xml.toxml())
+			case "Running":
+				self.reboot_lock_acquire()
+				self.domain.shutdown()
+				while True:
+					if not self.domain.isActive():
+						break
+				self.state = "Stopped"
+				self.reboot_lock_release()
 
 	@frappe.whitelist()
 	def pause(self):
@@ -180,11 +194,18 @@ class VirtualMachine(Document):
 
 	@frappe.whitelist()
 	def undefine(self):
+		# we might not have the domain but it might exist
+		if not self.domain:
+			try:
+				self.domain = libvirt_connection.lookupByName(self.name)
+			except:
+				# if it does not exist no extra effort needed
+				return
 		if self.domain:
 			if self.domain.isActive():
 				self.domain.destroy()
-			else:
-				self.domain.undefine()
+
+			self.domain.undefine()
 
 	def _reboot(self):
 		self.reboot_lock_acquire()
@@ -216,13 +237,9 @@ class VirtualMachine(Document):
 	def apply_config(self):
 		self.xml = get_new_config()
 		self.create_config()
-		dom = libvirt_connection.defineXMLFlags(self.xml.toxml())
-
-		# try:
-		# 	dom.create()
-		# except:
-		# 	frappe.throw("There was an error creating the virtual machine.")
-		return dom
+		if self.state != "Undefined":
+			dom = libvirt_connection.defineXMLFlags(self.xml.toxml())
+			return dom
 
 	# the most important function
 	# takes parameters from the document and converts them to XML
