@@ -419,7 +419,6 @@ class VirtualMachine(Document):
 
 	def apply_image_config(self, cloud_init=None, ip_address=None, ssh_key=None):
 		workdir = tempfile.mkdtemp(prefix="nocloud-")
-
 		if cloud_init:
 			# cloud-init section
 			user_data_path = os.path.join(workdir, "user-data")
@@ -466,6 +465,8 @@ network:
 					"/var/lib/cloud/seed/nocloud",
 					"--mkdir",
 					"/etc/netplan",
+					"--run-command",
+                    "ssh-keygen -A"
 			]
 			if cloud_init:
 				file_upload_command.extend([
