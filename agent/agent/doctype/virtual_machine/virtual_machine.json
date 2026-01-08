@@ -6,6 +6,7 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "machine_type",
   "memory",
   "number_of_vcpus",
   "column_break_ctcj",
@@ -17,6 +18,7 @@
  ],
  "fields": [
   {
+   "fetch_from": "machine_type.memory",
    "fieldname": "memory",
    "fieldtype": "Float",
    "in_list_view": 1,
@@ -25,6 +27,7 @@
   },
   {
    "default": "1",
+   "fetch_from": "machine_type.number_of_vcpus",
    "fieldname": "number_of_vcpus",
    "fieldtype": "Int",
    "in_list_view": 1,
@@ -64,12 +67,18 @@
    "fieldtype": "Table",
    "label": "Network Interfaces",
    "options": "Network Interface"
+  },
+  {
+   "fieldname": "machine_type",
+   "fieldtype": "Link",
+   "label": "Machine Type",
+   "options": "Virtual Machine Type"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-11-20 14:35:28.032069",
+ "modified": "2026-01-08 10:20:51.141337",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine",

@@ -37,12 +37,12 @@ class VirtualMachine(Document):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
-		from frappe.types import DF
-
 		from agent.agent.doctype.network_interface.network_interface import NetworkInterface
 		from agent.agent.doctype.vm_disk.vm_disk import VMDisk
+		from frappe.types import DF
 
 		disks: DF.Table[VMDisk]
+		machine_type: DF.Link | None
 		memory: DF.Float
 		network_interfaces: DF.Table[NetworkInterface]
 		number_of_vcpus: DF.Int
