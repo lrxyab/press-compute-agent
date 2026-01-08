@@ -169,6 +169,11 @@ class VirtualMachine(Document):
 		self.state = "Running"
 
 	@frappe.whitelist()
+	def terminate(self):
+		self.state = "Undefined"
+		self.save()
+
+	@frappe.whitelist()
 	def stop(self):
 		if self.domain:
 			state, _ = self.domain.state()
