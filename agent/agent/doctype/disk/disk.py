@@ -57,6 +57,18 @@ class Disk(Document):
 
 		shutil.copy(base_image_path, self.file_path)
 
+	def on_change(self):
+		if is_orchestrator():
+			from orchestrator.orchestrator_mapper.api import ComputeCall
+
+			call_to_agent = ComputeCall(self.agent)
+			doc_dict = call_to_agent.update_doc("Disk", self.name, self.as_dict())
+			self.update(doc_dict)
+
+		else:
+			if self.has_value_changed("size"):
+				subprocess.call(["qemu-img", "resize", "-f", "qcow2", self.get_path(), f"{self.size}G"])
+
 	def create_disk(self):
 		# TODO: find a way to do this without subprocess calls
 		try:
