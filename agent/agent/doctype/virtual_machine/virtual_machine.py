@@ -407,25 +407,28 @@ class VirtualMachine(Document):
 		with open(meta_data_path, "w") as f:
 			f.write(f"instance-id: {self.uuid}\nlocal-hostname: {self.name}\n")
 
-		# # netplan section
-		# netplan_path = os.path.join(workdir, "01-config.yaml")
-		# netplan = f"""
-		# network:
-		# 		version: 2
-		# 		ethernets:
-		#   		ens1:
-		#     		dhcp4: false
-		#     		addresses:
-		#       		- {ip_address}/32
-		#     		gateway4: 62.210.0.1
-		#     		nameservers:
-		#       		addresses:
-		#         		- 51.159.47.28
-		#         		- 51.159.47.26
-		# """
+		# netplan section
+		netplan_path = os.path.join(workdir, "01-config.yaml")
+		netplan = f"""
+network:
+  version: 2
+  ethernets:
+    ens1:
+      dhcp4: false
+      addresses:
+        - {ip_address}/32
+      routes:
+        - to: 0.0.0.0/0
+          via: 62.210.0.1
+          on-link: true
+      nameservers:
+        addresses:
+          - 51.159.47.28
+          - 51.159.47.26
+"""
 
-		# with open(netplan_path, "w") as f:
-		# 	f.write(netplan)
+		with open(netplan_path, "w") as f:
+			f.write(netplan)
 
 		image_path = self.get_image_path()
 		try:
@@ -440,8 +443,8 @@ class VirtualMachine(Document):
 					f"{user_data_path}:/var/lib/cloud/seed/nocloud/user-data",
 					"--upload",
 					f"{meta_data_path}:/var/lib/cloud/seed/nocloud/meta-data",
-					# "--upload",
-					# f"{netplan_path}:/etc/netplan/01-config.yaml",
+					"--upload",
+					f"{netplan_path}:/etc/netplan/01-config.yaml",
 				],
 				check=True,
 			)
