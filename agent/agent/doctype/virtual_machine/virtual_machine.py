@@ -46,6 +46,7 @@ class VirtualMachine(Document):
 		memory: DF.Float
 		network_interfaces: DF.Table[NetworkInterface]
 		number_of_vcpus: DF.Int
+		ssh_key: DF.Code | None
 		state: DF.Literal["Undefined", "Stopped", "Running", "Paused", "Saved"]
 		uuid: DF.Data | None
 	# end: auto-generated types
@@ -76,6 +77,7 @@ class VirtualMachine(Document):
 		else:
 			self.domain = self.apply_config()
 			self.set_state()
+			self.apply_image_config(ssh_key=self.ssh_key)
 
 	def validate(self):
 		if self.polled:
@@ -415,23 +417,25 @@ class VirtualMachine(Document):
 		self.save()
 		return self.load_from_db().as_dict()
 
-	def apply_image_config(self, cloud_init, ip_address):
+	def apply_image_config(self, cloud_init=None, ip_address=None, ssh_key=None):
 		workdir = tempfile.mkdtemp(prefix="nocloud-")
 
-		# cloud-init section
-		user_data_path = os.path.join(workdir, "user-data")
-		meta_data_path = os.path.join(workdir, "meta-data")
-		print(cloud_init)
+		if cloud_init:
+			# cloud-init section
+			user_data_path = os.path.join(workdir, "user-data")
+			meta_data_path = os.path.join(workdir, "meta-data")
+			print(cloud_init)
 
-		with open(user_data_path, "w") as f:
-			f.write(cloud_init)
+			with open(user_data_path, "w") as f:
+				f.write(cloud_init)
 
-		with open(meta_data_path, "w") as f:
-			f.write(f"instance-id: {self.uuid}\nlocal-hostname: {self.name}\n")
+			with open(meta_data_path, "w") as f:
+				f.write(f"instance-id: {self.uuid}\nlocal-hostname: {self.name}\n")
 
-		# netplan section
-		netplan_path = os.path.join(workdir, "01-config.yaml")
-		netplan = f"""
+		if ip_address:
+			# netplan section
+			netplan_path = os.path.join(workdir, "01-config.yaml")
+			netplan = f"""
 network:
   version: 2
   ethernets:
@@ -449,25 +453,40 @@ network:
           - 51.159.47.26
 """
 
-		with open(netplan_path, "w") as f:
-			f.write(netplan)
+			with open(netplan_path, "w") as f:
+				f.write(netplan)
 
 		image_path = self.get_image_path()
 		try:
-			subprocess.run(
-				[
+			file_upload_command = [
 					"virt-customize",
 					"-a",
 					image_path,
 					"--mkdir",
 					"/var/lib/cloud/seed/nocloud",
+					"--mkdir",
+					"/etc/netplan",
+			]
+			if cloud_init:
+				file_upload_command.extend([
 					"--upload",
 					f"{user_data_path}:/var/lib/cloud/seed/nocloud/user-data",
 					"--upload",
 					f"{meta_data_path}:/var/lib/cloud/seed/nocloud/meta-data",
+				])
+			if ip_address:
+				file_upload_command.extend([
 					"--upload",
 					f"{netplan_path}:/etc/netplan/01-config.yaml",
-				],
+				])
+			if ssh_key:
+				file_upload_command.extend([
+					"--ssh-inject",
+					f"root:string:{ssh_key}"
+				])
+
+			subprocess.run(
+				file_upload_command,
 				check=True,
 			)
 		except Exception as e:
@@ -611,6 +630,7 @@ def _new_vm_from_image(
 	ip_address,
 	agent=None,
 	private_network=None,
+	ssh_key=None,
 ):
 	# import random
 	# if agent == None:
@@ -626,6 +646,7 @@ def _new_vm_from_image(
 	vm.name = name
 	vm.memory = memory
 	vm.number_of_vcpus = number_of_vcpus
+	vm.ssh_key = ssh_key
 	# vm.agent = agent.name
 
 	vm.append(
@@ -643,7 +664,7 @@ def _new_vm_from_image(
 	vm.insert()
 
 	vm.load_from_db()
-	vm.apply_image_config(cloud_init, ip_address)
+	vm.apply_image_config(cloud_init=cloud_init, ip_address=ip_address, ssh_key=ssh_key)
 
 	# vm.load_from_db()
 	vm.state = "Running"
@@ -660,6 +681,7 @@ def new_vm_from_image(
 	ip_address,
 	agent=None,
 	private_network=None,
+	ssh_key=None,
 ):
 
     frappe.enqueue(
@@ -672,7 +694,8 @@ def new_vm_from_image(
         mac_address=mac_address,
         ip_address=ip_address,
         agent=agent,
-        private_network=private_network
+        private_network=private_network,
+        ssh_key=ssh_key,
     )
 class RebootLockedException(Exception):
 	def __init__(self):

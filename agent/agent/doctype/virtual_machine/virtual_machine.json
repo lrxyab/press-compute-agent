@@ -14,7 +14,9 @@
   "uuid",
   "section_break_frdk",
   "disks",
-  "network_interfaces"
+  "network_interfaces",
+  "section_break_qdgm",
+  "ssh_key"
  ],
  "fields": [
   {
@@ -73,12 +75,21 @@
    "fieldtype": "Link",
    "label": "Machine Type",
    "options": "Virtual Machine Type"
+  },
+  {
+   "fieldname": "section_break_qdgm",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "ssh_key",
+   "fieldtype": "Code",
+   "label": "SSH Key"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-01-08 10:20:51.141337",
+ "modified": "2026-01-08 17:52:19.071787",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine",
