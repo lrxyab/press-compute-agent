@@ -116,18 +116,18 @@ class VirtualMachine(Document):
 						state of the virtual machine""").format(e)
 					)
 
-				# hacky way to declaratively apply disks
-				prev_disks = set([(disk.disk, disk.device) for disk in doc_before_save.disks])
-				new_disks = set([(disk.disk, disk.device) for disk in self.disks])
-				if new_disks != prev_disks:
-					# detach disks that don't exist anymore
-					for disk in prev_disks.difference(new_disks):
-						self.detach_disk(disk[1])
-					# attach newly defined disks
-					for disk in new_disks.difference(prev_disks):
-						disk_doc = frappe.get_doc("Disk", disk[0])
-						path = disk_doc.file_path
-						self.attach_disk(path, disk[1])
+			# hacky way to declaratively apply disks
+			prev_disks = set([(disk.disk, disk.device) for disk in doc_before_save.disks])
+			new_disks = set([(disk.disk, disk.device) for disk in self.disks])
+			if new_disks != prev_disks:
+				# detach disks that don't exist anymore
+				for disk in prev_disks.difference(new_disks):
+					self.detach_disk(disk[1])
+				# attach newly defined disks
+				for disk in new_disks.difference(prev_disks):
+					disk_doc = frappe.get_doc("Disk", disk[0])
+					path = disk_doc.file_path
+					self.attach_disk(path, disk[1])
 
 	def validate_root_device_exists(self):
 		for disk in self.disks:
