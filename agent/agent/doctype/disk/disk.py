@@ -46,6 +46,7 @@ class Disk(Document):
 		else:
 			if self.is_primary_disk:
 				self.create_system_image()
+				self.set_disk_size()
 			else:
 				self.create_disk()
 
@@ -67,7 +68,7 @@ class Disk(Document):
 
 		else:
 			if self.has_value_changed("size"):
-				subprocess.call(["qemu-img", "resize", "-f", "qcow2", self.get_path(), f"{self.size}G"])
+				self.set_disk_size()
 
 	def create_disk(self):
 		# TODO: find a way to do this without subprocess calls
@@ -80,3 +81,6 @@ class Disk(Document):
 		if is_orchestrator():
 			return
 		os.remove(self.file_path)
+
+	def set_disk_size(self):
+		subprocess.call(["qemu-img", "resize", "-f", "qcow2", self.get_path(), f"{self.size}G"])
