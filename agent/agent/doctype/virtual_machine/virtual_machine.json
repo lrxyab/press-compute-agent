@@ -6,30 +6,33 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "machine_type",
+  "virtual_machine_type",
   "memory",
   "number_of_vcpus",
   "column_break_ctcj",
   "state",
   "uuid",
+  "virtual_machine_image",
   "section_break_frdk",
   "disks",
   "network_interfaces",
   "section_break_qdgm",
-  "ssh_key"
+  "ssh_key",
+  "cloud_init"
  ],
  "fields": [
   {
-   "fetch_from": "machine_type.memory",
+   "fetch_from": "virtual_machine_type.memory",
    "fieldname": "memory",
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Memory (GiB)",
+   "non_negative": 1,
    "reqd": 1
   },
   {
    "default": "1",
-   "fetch_from": "machine_type.number_of_vcpus",
+   "fetch_from": "virtual_machine_type.number_of_vcpus",
    "fieldname": "number_of_vcpus",
    "fieldtype": "Int",
    "in_list_view": 1,
@@ -71,25 +74,40 @@
    "options": "Network Interface"
   },
   {
-   "fieldname": "machine_type",
-   "fieldtype": "Link",
-   "label": "Machine Type",
-   "options": "Virtual Machine Type"
-  },
-  {
    "fieldname": "section_break_qdgm",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "label": "First Boot Config"
   },
   {
    "fieldname": "ssh_key",
    "fieldtype": "Code",
-   "label": "SSH Key"
+   "label": "SSH Key",
+   "reqd": 1
+  },
+  {
+   "fieldname": "virtual_machine_image",
+   "fieldtype": "Link",
+   "label": "Virtual Machine Image",
+   "options": "Virtual Machine Image",
+   "reqd": 1
+  },
+  {
+   "fieldname": "virtual_machine_type",
+   "fieldtype": "Link",
+   "label": "Virtual Machine Type",
+   "options": "Virtual Machine Type",
+   "reqd": 1
+  },
+  {
+   "fieldname": "cloud_init",
+   "fieldtype": "Code",
+   "label": "Cloud Init"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-01-08 17:52:19.071787",
+ "modified": "2026-01-11 19:37:47.499011",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine",

@@ -5,14 +5,17 @@ import os
 import shutil
 import subprocess
 import tempfile
+from typing import Literal
 from uuid import uuid4
 from xml.dom import minidom
 
 import frappe
 import libvirt
-from frappe import _
+from frappe import DoesNotExistError, _
 from frappe.model.document import Document
 from frappe.utils.caching import redis_cache
+
+from pathlib import Path
 
 from agent.configuration.configs import XML_CONFIG
 from agent.configuration.connections import libvirt_connection
@@ -41,14 +44,16 @@ class VirtualMachine(Document):
 		from agent.agent.doctype.vm_disk.vm_disk import VMDisk
 		from frappe.types import DF
 
+		cloud_init: DF.Code | None
 		disks: DF.Table[VMDisk]
-		machine_type: DF.Link | None
 		memory: DF.Float
 		network_interfaces: DF.Table[NetworkInterface]
 		number_of_vcpus: DF.Int
-		ssh_key: DF.Code | None
+		ssh_key: DF.Code
 		state: DF.Literal["Undefined", "Stopped", "Running", "Paused", "Saved"]
 		uuid: DF.Data | None
+		virtual_machine_image: DF.Link
+		virtual_machine_type: DF.Link
 	# end: auto-generated types
 
 	def __init__(self, *args, **kwargs):
@@ -75,14 +80,28 @@ class VirtualMachine(Document):
 			doc_dict = call_to_agent.create_doc("Virtual Machine", self.as_dict())
 			self.update(doc_dict)
 		else:
+			if not self.get_image_path():
+				root_disk_size = frappe.db.get_value("Virtual Machine Type", self.virtual_machine_type, "root_disk_size")
+				root_disk = frappe.new_doc("Disk")
+				root_disk.is_primary_disk = True
+				root_disk.size = root_disk_size
+				root_disk.virtual_machine_image = self.virtual_machine_image
+				root_disk.insert()
+				self.append("disks", {"disk": root_disk.name, "device": "vda"})
+
+
 			self.domain = self.apply_config()
 			self.set_state()
-			self.apply_image_config(ssh_key=self.ssh_key)
+			# assuming that a seed image named {self.uuid}.img is always created because this is
+			# hardcoded in the config in the previous step
+			self.apply_image_config()
 
 	def validate(self):
 		if self.polled:
 			return
-		self.validate_root_device_exists()
+
+		# sunsetting this since there is a forced creation of root disk
+		# self.validate_root_device_exists()
 
 	def on_change(self):
 		if self.polled:
@@ -278,29 +297,44 @@ class VirtualMachine(Document):
 	def create_device_config(self):
 		devices = self.xml.getElementsByTagName("devices")[0]
 
+		# volume disks
 		for disk in self.disks:
-			disk_elem = self.xml.createElement("disk")
-			disk_elem.setAttribute("type", "file")
-			disk_elem.setAttribute("device", "disk")
-
-			driver = self.xml.createElement("driver")
-			driver.setAttribute("name", "qemu")
-			driver.setAttribute("type", "qcow2")
-			disk_elem.appendChild(driver)
-
-			source = self.xml.createElement("source")
 			disk_doc = frappe.get_doc("Disk", disk.disk)
 			file_path = disk_doc.get_path()
-			source.setAttribute("file", file_path)
-			disk_elem.appendChild(source)
-
-			target = self.xml.createElement("target")
-			target.setAttribute("dev", disk.device)
-			target.setAttribute("bus", "virtio")
-			disk_elem.appendChild(target)
-
+			disk_elem = self.create_disk_config(file_path=file_path, dev=disk.device,
+									   disk_type="Volume")
 			devices.appendChild(disk_elem)
+
+		seed_elem = self.create_disk_config(file_path=self.seed_path, dev="sda", disk_type="Seed")
+		devices.appendChild(seed_elem)
+
 		self.device_config = devices
+
+	def create_disk_config(self, file_path: str, dev: str, disk_type: Literal["Volume", "Seed"]):
+		disk_device  = {"Volume": "disk", "Seed": "cdrom"}[disk_type]
+		driver_type = {"Volume": "qcow2", "Seed": "raw"}[disk_type]
+		target_bus = {"Volume": "virtio", "Seed": "sata"}[disk_type]
+
+		disk_elem = self.xml.createElement("disk")
+		disk_elem.setAttribute("type", "file")
+		disk_elem.setAttribute("device", disk_device)
+
+		driver = self.xml.createElement("driver")
+		driver.setAttribute("name", "qemu")
+		driver.setAttribute("type",driver_type)
+		disk_elem.appendChild(driver)
+
+		source = self.xml.createElement("source")
+		source.setAttribute("file", file_path)
+		disk_elem.appendChild(source)
+
+		target = self.xml.createElement("target")
+		target.setAttribute("dev", dev)
+		target.setAttribute("bus", target_bus)
+		disk_elem.appendChild(target)
+		print(disk_elem.toxml())
+
+		return disk_elem
 
 	def create_network_interface_config(self):
 		# TODO: add condition for all types. currently only using bridges
@@ -417,87 +451,71 @@ class VirtualMachine(Document):
 		self.save()
 		return self.load_from_db().as_dict()
 
-	def apply_image_config(self, cloud_init=None, ip_address=None, ssh_key=None):
-		workdir = tempfile.mkdtemp(prefix="nocloud-")
-		if cloud_init:
-			# cloud-init section
-			user_data_path = os.path.join(workdir, "user-data")
-			meta_data_path = os.path.join(workdir, "meta-data")
-			print(cloud_init)
+	def apply_image_config(self):
 
-			with open(user_data_path, "w") as f:
-				f.write(cloud_init)
+		# try:
+		# 	public_ip_address = self.allocate_public_ip()
+		# except:
+		# 	public_ip_address = None
+		# 	frappe.msgprint("Couldn't provision a public ip address")
 
-			with open(meta_data_path, "w") as f:
-				f.write(f"instance-id: {self.uuid}\nlocal-hostname: {self.name}\n")
-
-		if ip_address:
-			# netplan section
-			netplan_path = os.path.join(workdir, "01-config.yaml")
-			netplan = f"""
-network:
-  version: 2
-  ethernets:
-    ens1:
-      dhcp4: false
-      addresses:
-        - {ip_address}/32
-      routes:
-        - to: 0.0.0.0/0
-          via: 62.210.0.1
-          on-link: true
-      nameservers:
-        addresses:
-          - 51.159.47.28
-          - 51.159.47.26
-"""
-
-			with open(netplan_path, "w") as f:
-				f.write(netplan)
-
-		image_path = self.get_image_path()
-		try:
-			file_upload_command = [
-					"virt-customize",
-					"-a",
-					image_path,
-					"--mkdir",
-					"/var/lib/cloud/seed/nocloud",
-					"--mkdir",
-					"/etc/netplan",
-					"--run-command",
-                    "ssh-keygen -A"
-			]
-			if cloud_init:
-				file_upload_command.extend([
-					"--upload",
-					f"{user_data_path}:/var/lib/cloud/seed/nocloud/user-data",
-					"--upload",
-					f"{meta_data_path}:/var/lib/cloud/seed/nocloud/meta-data",
-				])
-			if ip_address:
-				file_upload_command.extend([
-					"--upload",
-					f"{netplan_path}:/etc/netplan/01-config.yaml",
-				])
-			if ssh_key:
-				file_upload_command.extend([
-					"--ssh-inject",
-					f"root:string:{ssh_key}"
-				])
-
-			subprocess.run(
-				file_upload_command,
-				check=True,
+		public_ip_address = "1.1.1.1"
+		if self.cloud_init:
+			user_data = self.cloud_init
+		else:
+			user_data = frappe.render_template(
+				"agent/agent/doctype/virtual_machine/user-data.jinja2",
+				context={"ip_address": public_ip_address, "ssh_key": self.ssh_key},
+				is_path=True
 			)
-		except Exception as e:
-			frappe.throw(f"{e}")
-		finally:
-			shutil.rmtree(workdir)
+
+		meta_data = frappe.render_template(
+			"agent/agent/doctype/virtual_machine/meta-data.jinja2",
+			context={"instance_id": self.uuid, "local_hostname": self.name},
+			is_path=True
+		)
+
+		with tempfile.TemporaryDirectory() as d:
+			temp_path = Path(d)
+			user_data_path = (temp_path / "user-data")
+			user_data_path.write_text(user_data)
+			meta_data_path = (temp_path / "meta-data")
+			meta_data_path.write_text(meta_data)
+
+
+			try:
+				subprocess.run(
+					["genisoimage",
+					"-output",
+					self.seed_path,
+					"-volid",
+					"cidata",
+					"-rational-rock",
+					"-joliet",
+	 				str(temp_path.absolute()),
+     				],
+					check=True
+				)
+			except Exception as e:
+				frappe.throw(f"{e}")
+			finally:
+				shutil.rmtree(temp_path)
 
 	@property
 	def reboot_lock_key(self):
 		return f"{self.name}-reboot-lock"
+
+	def allocate_public_ip(self):
+		#TODO: Might run into concurrency problems later on. Find a better solution
+		try:
+			ip_address_doc = frappe.get_doc("IP Address", {"virtual_machine": ("is", "not set")})
+			ip_address_doc.virtual_machine = self.name
+			ip_address_doc.save()
+
+		except frappe.exceptions.DoesNotExistError:
+			frappe.throw("No IP address currently available for allocation.")
+
+
 
 	def reboot_lock_acquire(self):
 		if self.get_reboot_lock():
@@ -510,6 +528,10 @@ network:
 
 	def get_reboot_lock(self):
 		return frappe.cache.get_value(self.reboot_lock_key)
+
+	@property
+	def seed_path(self):
+		return str(Path(CONFIG_PATH, "seeds", f"{self.uuid}.img").absolute())
 
 
 def generate_disk_xml(disk: str, dev: str):
@@ -648,6 +670,8 @@ def _new_vm_from_image(
 	vm.memory = memory
 	vm.number_of_vcpus = number_of_vcpus
 	vm.ssh_key = ssh_key
+	vm.cloud_init = cloud_init
+
 	# vm.agent = agent.name
 
 	vm.append(
@@ -657,6 +681,7 @@ def _new_vm_from_image(
 			"device": "vda",
 		},
 	)
+
 	vm.append("network_interfaces", {
 		"name1": "enp65s0f0",
 		"type": "Direct",
@@ -665,7 +690,6 @@ def _new_vm_from_image(
 	vm.insert()
 
 	vm.load_from_db()
-	vm.apply_image_config(cloud_init=cloud_init, ip_address=ip_address, ssh_key=ssh_key)
 
 	# vm.load_from_db()
 	vm.state = "Running"

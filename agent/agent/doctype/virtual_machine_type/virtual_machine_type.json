@@ -7,12 +7,13 @@
  "engine": "InnoDB",
  "field_order": [
   "memory",
-  "number_of_vcpus"
+  "number_of_vcpus",
+  "root_disk_size"
  ],
  "fields": [
   {
    "fieldname": "memory",
-   "fieldtype": "Data",
+   "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Memory (GiB)",
    "reqd": 1
@@ -23,12 +24,18 @@
    "in_list_view": 1,
    "label": "Number of VCPUs",
    "reqd": 1
+  },
+  {
+   "fieldname": "root_disk_size",
+   "fieldtype": "Float",
+   "label": "Root Disk Size (GiB)",
+   "reqd": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-01-08 10:16:12.436184",
+ "modified": "2026-01-09 14:55:16.519357",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine Type",

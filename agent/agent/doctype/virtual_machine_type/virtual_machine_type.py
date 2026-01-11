@@ -14,8 +14,9 @@ class VirtualMachineType(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
-		memory: DF.Data
+		memory: DF.Float
 		number_of_vcpus: DF.Int
+		root_disk_size: DF.Float
 	# end: auto-generated types
 
 	pass

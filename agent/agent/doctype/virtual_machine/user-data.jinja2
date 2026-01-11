@@ -1,0 +1,29 @@
+#cloud-config
+growpart:
+  mode: auto
+  devices: ['/']
+
+resize_rootfs: true
+
+ssh_deletekeys: true
+ssh_genkeytypes:
+  - rsa
+  - ecdsa
+  - ed25519
+
+ssh_pwauth: true
+
+users:
+  - name: root
+  {% if ssh_key %}
+    ssh_authorized_keys:
+      - {{ ssh_key }}
+  {% endif %}
+  - name: ubuntu
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    lock_passwd: false
+  {% if ssh_key %}
+    ssh_authorized_keys:
+      - {{ ssh_key }}
+  {% endif %}

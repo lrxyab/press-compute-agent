@@ -11,7 +11,7 @@ XML_CONFIG = """<domain type='kvm'>
   <vcpu placement='static'>1</vcpu>
   <os>
     <type arch='x86_64' machine='q35'>hvm</type>
-    <boot dev='cdrom'/>
+    <boot dev='hd'/>
     <bootmenu enable='yes'/>
   </os>
   <features>
