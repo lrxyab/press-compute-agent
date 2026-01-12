@@ -49,7 +49,8 @@ class VirtualMachine(Document):
 		memory: DF.Float
 		network_interfaces: DF.Table[NetworkInterface]
 		number_of_vcpus: DF.Int
-		ssh_key: DF.Code
+		public_ip_address: DF.Link | None
+		ssh_key: DF.Code | None
 		state: DF.Literal["Undefined", "Stopped", "Running", "Paused", "Saved"]
 		uuid: DF.Data | None
 		virtual_machine_image: DF.Link
@@ -95,6 +96,16 @@ class VirtualMachine(Document):
 			# assuming that a seed image named {self.uuid}.img is always created because this is
 			# hardcoded in the config in the previous step
 			self.apply_image_config()
+			if self.public_ip_address:
+				mac_address = frappe.db.get_value("IP Address", self.public_ip_address,
+									  "mac_address")
+				default_network_interface = frappe.db.get_single_value("Compute Settings", "default_network_interface")
+
+				self.append("network_interfaces", {
+					"name1": default_network_interface,
+					"type": "Direct",
+					"mac_address": mac_address,
+				})
 
 	def validate(self):
 		if self.polled:
@@ -459,13 +470,12 @@ class VirtualMachine(Document):
 		# 	public_ip_address = None
 		# 	frappe.msgprint("Couldn't provision a public ip address")
 
-		public_ip_address = "1.1.1.1"
 		if self.cloud_init:
 			user_data = self.cloud_init
 		else:
 			user_data = frappe.render_template(
 				"agent/agent/doctype/virtual_machine/user-data.jinja2",
-				context={"ip_address": public_ip_address, "ssh_key": self.ssh_key},
+				context={"ip_address": self.public_ip_address, "ssh_key": self.ssh_key},
 				is_path=True
 			)
 
@@ -512,17 +522,6 @@ class VirtualMachine(Document):
 	@property
 	def reboot_lock_key(self):
 		return f"{self.name}-reboot-lock"
-
-	def allocate_public_ip(self):
-		#TODO: Might run into concurrency problems later on. Find a better solution
-		try:
-			ip_address_doc = frappe.get_doc("IP Address", {"virtual_machine": ("is", "not set")})
-			ip_address_doc.virtual_machine = self.name
-			ip_address_doc.save()
-
-		except frappe.exceptions.DoesNotExistError:
-			frappe.throw("No IP address currently available for allocation.")
-
 
 
 	def reboot_lock_acquire(self):

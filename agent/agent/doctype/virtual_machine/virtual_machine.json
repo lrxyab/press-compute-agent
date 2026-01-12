@@ -13,6 +13,7 @@
   "state",
   "uuid",
   "virtual_machine_image",
+  "public_ip_address",
   "section_break_frdk",
   "disks",
   "network_interfaces",
@@ -81,8 +82,7 @@
   {
    "fieldname": "ssh_key",
    "fieldtype": "Code",
-   "label": "SSH Key",
-   "reqd": 1
+   "label": "SSH Key"
   },
   {
    "fieldname": "virtual_machine_image",
@@ -102,12 +102,19 @@
    "fieldname": "cloud_init",
    "fieldtype": "Code",
    "label": "Cloud Init"
+  },
+  {
+   "fieldname": "public_ip_address",
+   "fieldtype": "Link",
+   "label": "Public IP Address",
+   "options": "IP Address",
+   "set_only_once": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-01-11 19:37:47.499011",
+ "modified": "2026-01-12 07:42:11.728701",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine",
