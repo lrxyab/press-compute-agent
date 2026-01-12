@@ -653,48 +653,59 @@ def parse_machine_details(xml_string: str):
 def _new_vm_from_image(
 	name,
 	image,
-	memory,
-	number_of_vcpus,
-	cloud_init,
-	mac_address,
-	ip_address,
+	machine_type,
+	private_ip_address,
 	agent=None,
 	private_network=None,
 	ssh_key=None,
+	cloud_init=None,
 ):
 	# import random
 	# if agent == None:
 	# 	agent = random.choice(frappe.db.get_all("Agent", ["name", "default_network_interface"]))
 
-	root_volume = frappe.new_doc("Disk")
-	root_volume.is_primary_disk = True
-	root_volume.virtual_machine_image = image
-	# root_volume.agent = agent.name
-	root_volume.insert()
+
+	# public ip allocation
+	# shmort locking mechanism
+	ip_address_lock_key = lambda address: f"{address}-ip-address-lock"
+	free_ip_addresses = frappe.get_all("IP Address", {"virtual_machine": ("is", "not set")}, pluck="name")
+	unreserved_free_ip_addresses = []
+	for free_ip_address in free_ip_addresses:
+		if not frappe.cache.get_value(ip_address_lock_key(free_ip_address)):
+			unreserved_free_ip_addresses.append(free_ip_address)
+
+	if len(unreserved_free_ip_addresses) == 0:
+		frappe.throw("No free public ip address available :(")
+
+	public_ip_address = unreserved_free_ip_addresses[0]
+	frappe.cache.set_value(ip_address_lock_key(public_ip_address), True)
+	mac_address = frappe.db.get_value("IP Address", public_ip_address, "mac_address")
 
 	vm = frappe.new_doc("Virtual Machine")
 	vm.name = name
-	vm.memory = memory
-	vm.number_of_vcpus = number_of_vcpus
 	vm.ssh_key = ssh_key
 	vm.cloud_init = cloud_init
+	vm.public_ip_address = public_ip_address
+	vm.virtual_machine_image = image
+	vm.virtual_machine_type = machine_type
 
 	# vm.agent = agent.name
 
-	vm.append(
-		"disks",
-		{
-			"disk": root_volume.name,
-			"device": "vda",
-		},
-	)
-
-	vm.append("network_interfaces", {
-		"name1": "enp65s0f0",
-		"type": "Direct",
-		"mac_address": mac_address,
-	})
 	vm.insert()
+
+	# can be linked now
+	frappe.db.set_value("IP Address", public_ip_address, "virtual_machine", name)
+
+	if private_network:
+		private_network_doc = frappe.get_doc("Private Network", private_network)
+		private_network_doc.append(
+			"virtual_machines",
+			{
+				"virtual_machine": vm.name,
+				"ip_address": private_ip_address
+			},
+		)
+		private_network_doc.save()
 
 	vm.load_from_db()
 
@@ -706,28 +717,24 @@ def _new_vm_from_image(
 def new_vm_from_image(
 	name,
 	image,
-	memory,
-	number_of_vcpus,
-	cloud_init,
-	mac_address,
-	ip_address,
+	machine_type,
+	private_ip_address,
 	agent=None,
 	private_network=None,
 	ssh_key=None,
+	cloud_init=None,
 ):
 
     frappe.enqueue(
         _new_vm_from_image,
         name=name,
         image=image,
-        memory=memory,
-        number_of_vcpus=number_of_vcpus,
-        cloud_init=cloud_init,
-        mac_address=mac_address,
-        ip_address=ip_address,
+        machine_type=machine_type,
+        private_ip_address=private_ip_address,
         agent=agent,
         private_network=private_network,
         ssh_key=ssh_key,
+        cloud_init=cloud_init,
     )
 class RebootLockedException(Exception):
 	def __init__(self):
