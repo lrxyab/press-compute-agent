@@ -713,6 +713,9 @@ def _new_vm_from_image(
 	vm.state = "Running"
 	vm.save()
 
+	# this will be the instance_id to track the VM state
+	return vm.uuid
+
 @frappe.whitelist()
 def new_vm_from_image(
 	name,
@@ -725,8 +728,12 @@ def new_vm_from_image(
 	cloud_init=None,
 ):
 
-    frappe.enqueue(
-        _new_vm_from_image,
+	# TODO: after profiling, it seems that disk creation takes the most time
+	# safely enqueue it in such a way it doesn't affect functionality
+	# nevertheless, after moving away from virt-customize, the speed boosts
+	# are good enough to be able to afford the creation of the VM to be synchronous
+	# still keeping this structure if in the future there is a need to enqueue creation
+    return _new_vm_from_image(
         name=name,
         image=image,
         machine_type=machine_type,
