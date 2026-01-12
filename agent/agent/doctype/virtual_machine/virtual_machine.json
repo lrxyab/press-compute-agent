@@ -9,6 +9,7 @@
   "virtual_machine_type",
   "memory",
   "number_of_vcpus",
+  "root_disk_size",
   "column_break_ctcj",
   "state",
   "uuid",
@@ -24,8 +25,9 @@
  "fields": [
   {
    "fetch_from": "virtual_machine_type.memory",
+   "fetch_if_empty": 1,
    "fieldname": "memory",
-   "fieldtype": "Float",
+   "fieldtype": "Int",
    "in_list_view": 1,
    "label": "Memory (GiB)",
    "non_negative": 1,
@@ -34,10 +36,21 @@
   {
    "default": "1",
    "fetch_from": "virtual_machine_type.number_of_vcpus",
+   "fetch_if_empty": 1,
    "fieldname": "number_of_vcpus",
    "fieldtype": "Int",
    "in_list_view": 1,
    "label": "Number of VCPUs",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fetch_from": "virtual_machine_type.root_disk_size",
+   "fetch_if_empty": 1,
+   "fieldname": "root_disk_size",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Root Disk Size (GiB)",
    "reqd": 1
   },
   {
@@ -114,7 +127,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-01-12 07:42:11.728701",
+ "modified": "2026-01-12 21:56:08.674846",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine",

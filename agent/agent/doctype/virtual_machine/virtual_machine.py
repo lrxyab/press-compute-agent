@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 from typing import Literal
 from uuid import uuid4
+from warnings import filters
 from xml.dom import minidom
 
 import frappe
@@ -46,10 +47,11 @@ class VirtualMachine(Document):
 
 		cloud_init: DF.Code | None
 		disks: DF.Table[VMDisk]
-		memory: DF.Float
+		memory: DF.Int
 		network_interfaces: DF.Table[NetworkInterface]
 		number_of_vcpus: DF.Int
 		public_ip_address: DF.Link | None
+		root_disk_size: DF.Int
 		ssh_key: DF.Code | None
 		state: DF.Literal["Undefined", "Stopped", "Running", "Paused", "Saved"]
 		uuid: DF.Data | None
@@ -82,10 +84,9 @@ class VirtualMachine(Document):
 			self.update(doc_dict)
 		else:
 			if not self.get_image_path():
-				root_disk_size = frappe.db.get_value("Virtual Machine Type", self.virtual_machine_type, "root_disk_size")
 				root_disk = frappe.new_doc("Disk")
 				root_disk.is_primary_disk = True
-				root_disk.size = root_disk_size
+				root_disk.size = self.root_disk_size
 				root_disk.virtual_machine_image = self.virtual_machine_image
 				root_disk.insert()
 				self.append("disks", {"disk": root_disk.name, "device": "vda"})
@@ -221,11 +222,6 @@ class VirtualMachine(Document):
 		self.state = "Running"
 
 	@frappe.whitelist()
-	def terminate(self):
-		self.state = "Undefined"
-		self.save()
-
-	@frappe.whitelist()
 	def stop(self):
 		if self.domain:
 			state, _ = self.domain.state()
@@ -264,7 +260,7 @@ class VirtualMachine(Document):
 
 			self.domain.undefine()
 
-	def _reboot(self):
+	def _shutdown(self, reboot=False):
 		self.reboot_lock_acquire()
 
 		try:
@@ -279,13 +275,26 @@ class VirtualMachine(Document):
 					destroyed = True
 					break
 			if not destroyed:
-				frappe.throw("Virtual Machine could not be shut down to be rebooted.")
+				frappe.throw("Virtual Machine could not be shut down.")
+		except:
+			raise ShutdownFailedException
+
+		if not reboot:
+			self.reboot_lock_release()
+			self.state = "Stopped"
+			self.save()
+
+	@frappe.whitelist()
+	def shutdown(self):
+		frappe.enqueue_doc("Virtual Machine", self.name, "_shutdown")
+
+	def _reboot(self):
+		try:
+			self._shutdown(reboot=True)
 			self.domain.create()
 		except:
 			raise RebootFailedException
-
-		finally:
-			self.reboot_lock_release()
+		self.reboot_lock_release()
 
 	@frappe.whitelist()
 	def reboot(self):
@@ -679,6 +688,7 @@ def _new_vm_from_image(
 	private_network=None,
 	ssh_key=None,
 	cloud_init=None,
+	root_disk_size=None,
 ):
 	# import random
 	# if agent == None:
@@ -708,6 +718,7 @@ def _new_vm_from_image(
 	vm.public_ip_address = public_ip_address
 	vm.virtual_machine_image = image
 	vm.virtual_machine_type = machine_type
+	vm.root_disk_size = root_disk_size
 
 	# vm.agent = agent.name
 
@@ -746,6 +757,7 @@ def new_vm_from_image(
 	private_network=None,
 	ssh_key=None,
 	cloud_init=None,
+	root_disk_size=None,
 ):
 
 	# TODO: after profiling, it seems that disk creation takes the most time
@@ -762,12 +774,35 @@ def new_vm_from_image(
         private_network=private_network,
         ssh_key=ssh_key,
         cloud_init=cloud_init,
+        root_disk_size=root_disk_size,
     )
+
+@frappe.whitelist(methods=["GET"])
+def get_vm_details_from_instance_id(instance_id):
+	vm_doc = frappe.get_doc("Virtual Machine", {"uuid": instance_id})
+	vm_dict = vm_doc.as_dict()
+
+	# private ip addresses
+	vm_dict["private_ip_addresses"] = frappe.get_all("Private Network Machines", {"virtual_machine": vm_doc.name}, pluck="ip_address")
+	new_disks = []
+
+	for disk in vm_dict["disks"]:
+		name = disk["name"]
+		size = frappe.get_value("Disk", name, "size")
+		disk["size"] = size
+		new_disks.append(disk)
+
+	vm_dict["disks"] = new_disks
+	return vm_dict
 class RebootLockedException(Exception):
 	def __init__(self):
 		pass
 
 
 class RebootFailedException(Exception):
+	def __init__(self):
+		pass
+
+class ShutdownFailedException(Exception):
 	def __init__(self):
 		pass
