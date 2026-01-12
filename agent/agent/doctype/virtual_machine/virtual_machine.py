@@ -475,12 +475,20 @@ class VirtualMachine(Document):
 			is_path=True
 		)
 
+		network_config = frappe.render_template(
+			"agent/agent/doctype/virtual_machine/network-config.jinja2",
+			context={"ip_address": self.public_ip_address},
+			is_path=True
+		)
+
 		with tempfile.TemporaryDirectory() as d:
 			temp_path = Path(d)
 			user_data_path = (temp_path / "user-data")
 			user_data_path.write_text(user_data)
 			meta_data_path = (temp_path / "meta-data")
 			meta_data_path.write_text(meta_data)
+			network_config_path = (temp_path / "network-config")
+			network_config_path.write_text(network_config)
 
 
 			try:
