@@ -161,6 +161,26 @@ class VirtualMachine(Document):
 					path = disk_doc.file_path
 					self.attach_disk(path, disk[1])
 
+	def on_trash(self):
+		if self.public_ip_address:
+			frappe.db.set_value("IP Address", self.public_ip_address, "virtual_machine", None)
+
+		# bad naming.
+		private_network_children = frappe.get_all("Private Network Machines", {"virtual_machine":
+																		 self.name}, pluck="name")
+		for private_network_child in private_network_children:
+			grid_doc = frappe.get_doc("Private Network Machines", private_network_child)
+			grid_doc.delete()
+
+		self.undefine()
+
+	def after_delete(self):
+		#delete the root volume
+		for disk in self.disks:
+			if disk.device == "vda":
+				frappe.get_doc("Disk", disk.disk).delete()
+				break
+
 	def validate_root_device_exists(self):
 		for disk in self.disks:
 			if disk.device == "vda":
