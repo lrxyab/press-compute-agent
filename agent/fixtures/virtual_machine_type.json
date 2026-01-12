@@ -1,0 +1,20 @@
+[
+ {
+  "docstatus": 0,
+  "doctype": "Virtual Machine Type",
+  "memory": 4.0,
+  "modified": "2026-01-12 20:35:54.993723",
+  "name": "CPX22",
+  "number_of_vcpus": 2,
+  "root_disk_size": 80.0
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Virtual Machine Type",
+  "memory": 8.0,
+  "modified": "2026-01-12 20:36:20.398356",
+  "name": "CPX32",
+  "number_of_vcpus": 4,
+  "root_disk_size": 160.0
+ }
+]
