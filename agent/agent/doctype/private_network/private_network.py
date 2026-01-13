@@ -7,6 +7,7 @@ from frappe.model.document import Document
 from agent.configuration.connections import libvirt_connection
 
 import ipaddress
+import libvirt
 
 class PrivateNetwork(Document):
 	# begin: auto-generated types
@@ -31,9 +32,9 @@ class PrivateNetwork(Document):
 	def on_change(self):
 		# libvirt_connection.networkDefineXML()
 		network_config = self.get_config()
-		network = libvirt_connection.networkDefineXML(network_config)
-		if not network.isActive():
-			network.create()
+		network = libvirt_connection.networkDefineXMLFlags(network_config)
+		network.destroy()
+		network.create()
 
 		network.setAutostart(True)
 
