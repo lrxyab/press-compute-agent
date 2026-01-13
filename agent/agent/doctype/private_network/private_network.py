@@ -73,6 +73,7 @@ class PrivateNetwork(Document):
 		dhcp.appendChild(rng)
 
 		for virtual_machine in self.virtual_machines:
+			mac_address = mac_address_generator()
 			if not virtual_machine.mac_address:
 				virtual_machine.mac_address = mac_address_generator()
 				virtual_machine.save()

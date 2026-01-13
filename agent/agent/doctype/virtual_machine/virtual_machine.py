@@ -441,7 +441,7 @@ class VirtualMachine(Document):
 			interface.appendChild(source)
 
 			mac = self.xml.createElement("mac")
-			source.setAttribute("address", private_network.mac_address)
+			mac.setAttribute("address", private_network.mac_address)
 			interface.appendChild(mac)
 
 			model = self.xml.createElement("model")
