@@ -53,8 +53,7 @@ class VirtualMachineImage(Document):
 		self.status = "Completed"
 		self.save()
 
-@frappe.whitelist()
-def create_image(instance_id):
+def _create_image(instance_id):
 	virtual_machine = frappe.db.get_value("Virtual Machine", {"uuid": instance_id})
 	virtual_machine_image_doc = frappe.new_doc("Virtual Machine Image")
 	virtual_machine_image_doc.name = f"{virtual_machine}-image-{frappe.utils.random_string(5)}"
@@ -63,3 +62,7 @@ def create_image(instance_id):
 	virtual_machine_image_doc._take_image()
 
 	return virtual_machine_image_doc.load_from_db().as_dict()
+
+@frappe.whitelist()
+def create_image(instance_id):
+	frappe.enqueue(_create_image, instance_id=instance_id)
