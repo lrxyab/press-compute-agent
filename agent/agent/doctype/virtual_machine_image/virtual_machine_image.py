@@ -60,5 +60,6 @@ def create_image(instance_id):
 	virtual_machine_image_doc.name = f"{virtual_machine}-image-{frappe.utils.random_string(5)}"
 	virtual_machine_image_doc.virtual_machine = virtual_machine
 	virtual_machine_image_doc.is_from_vm = True
-
 	virtual_machine_image_doc._take_image()
+
+	return virtual_machine_image_doc.load_from_db().as_dict()
