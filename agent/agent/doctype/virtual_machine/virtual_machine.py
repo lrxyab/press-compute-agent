@@ -708,7 +708,7 @@ def _new_vm_from_image(
 		frappe.throw("No free public ip address available :(")
 
 	public_ip_address = unreserved_free_ip_addresses[0]
-	frappe.cache.set_value(ip_address_lock_key(public_ip_address), True)
+	frappe.cache.set_value(ip_address_lock_key(public_ip_address), True, expires_in_sec=50)
 	mac_address = frappe.db.get_value("IP Address", public_ip_address, "mac_address")
 
 	vm = frappe.new_doc("Virtual Machine")
