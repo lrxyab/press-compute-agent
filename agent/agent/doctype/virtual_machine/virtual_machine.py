@@ -7,7 +7,6 @@ import subprocess
 import tempfile
 from typing import Literal
 from uuid import uuid4
-from warnings import filters
 from xml.dom import minidom
 
 import frappe
@@ -709,7 +708,6 @@ def _new_vm_from_image(
 
 	public_ip_address = unreserved_free_ip_addresses[0]
 	frappe.cache.set_value(ip_address_lock_key(public_ip_address), True, expires_in_sec=50)
-	mac_address = frappe.db.get_value("IP Address", public_ip_address, "mac_address")
 
 	vm = frappe.new_doc("Virtual Machine")
 	vm.name = name
@@ -794,6 +792,7 @@ def get_vm_details_from_instance_id(instance_id):
 
 	vm_dict["disks"] = new_disks
 	return vm_dict
+
 class RebootLockedException(Exception):
 	def __init__(self):
 		pass
