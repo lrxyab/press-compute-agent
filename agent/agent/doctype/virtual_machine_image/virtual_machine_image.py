@@ -52,3 +52,11 @@ class VirtualMachineImage(Document):
 		self.file_path = str(image_path.absolute())
 		self.status = "Completed"
 		self.save()
+
+@frappe.whitelist()
+def create_image(instance_id):
+	virtual_machine = frappe.db.get_value("Virtual Machine", {"uuid": instance_id})
+	virtual_machine_image_doc = frappe.new_doc("Virtual Machine Image")
+	virtual_machine_image_doc.virtual_machine = virtual_machine
+
+	virtual_machine_image_doc._take_image()
