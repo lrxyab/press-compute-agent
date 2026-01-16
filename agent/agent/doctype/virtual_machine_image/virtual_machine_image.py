@@ -20,7 +20,7 @@ class VirtualMachineImage(Document):
 
 		file_path: DF.Data | None
 		is_from_vm: DF.Check
-		status: DF.Literal["Draft", "Pending", "Completed"]
+		status: DF.Literal["Draft", "Pending", "Ongoing", "Completed"]
 		virtual_machine: DF.Link | None
 	# end: auto-generated types
 
@@ -51,18 +51,20 @@ class VirtualMachineImage(Document):
 		backup.begin()
 		self.file_path = str(image_path.absolute())
 		self.status = "Completed"
+
 		self.save()
 
-def _create_image(instance_id):
+
+@frappe.whitelist()
+def create_image(instance_id):
 	virtual_machine = frappe.db.get_value("Virtual Machine", {"uuid": instance_id})
 	virtual_machine_image_doc = frappe.new_doc("Virtual Machine Image")
 	virtual_machine_image_doc.name = f"{virtual_machine}-image-{frappe.utils.random_string(5)}"
 	virtual_machine_image_doc.virtual_machine = virtual_machine
 	virtual_machine_image_doc.is_from_vm = True
-	virtual_machine_image_doc._take_image()
+	virtual_machine_image_doc.status = "Ongoing"
 
-	return virtual_machine_image_doc.load_from_db().as_dict()
+	virtual_machine_image_doc.save()
 
-@frappe.whitelist()
-def create_image(instance_id):
-	frappe.enqueue(_create_image, instance_id=instance_id)
+	frappe.enqueue_doc("Virtual Machine Image", virtual_machine_image_doc.name, "_take_image")
+	return virtual_machine_image_doc.name
