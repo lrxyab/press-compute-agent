@@ -11,7 +11,8 @@
   "virtual_machine",
   "status",
   "column_break_ltbd",
-  "is_from_vm"
+  "is_from_vm",
+  "size"
  ],
  "fields": [
   {
@@ -54,12 +55,17 @@
    "fieldname": "is_from_vm",
    "fieldtype": "Check",
    "label": "Is From VM"
+  },
+  {
+   "fieldname": "size",
+   "fieldtype": "Data",
+   "label": "Size"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-01-16 11:20:41.096721",
+ "modified": "2026-01-16 11:31:45.938426",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine Image",

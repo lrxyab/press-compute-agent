@@ -20,6 +20,7 @@ class VirtualMachineImage(Document):
 
 		file_path: DF.Data | None
 		is_from_vm: DF.Check
+		size: DF.Data | None
 		status: DF.Literal["Draft", "Pending", "Ongoing", "Completed"]
 		virtual_machine: DF.Link | None
 	# end: auto-generated types
@@ -51,6 +52,14 @@ class VirtualMachineImage(Document):
 		backup.begin()
 		self.file_path = str(image_path.absolute())
 		self.status = "Completed"
+
+		for disk in virtual_machine.disks:
+			if disk.device == "vda":
+				root_disk_name = disk.disk
+				self.size = frappe.db.get_value("Disk", root_disk_name, "size")
+				break
+
+
 
 		self.save()
 
