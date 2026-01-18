@@ -1,6 +1,7 @@
 # Copyright (c) 2025, ayush@frappe.io and contributors
 # For license information, please see license.txt
 
+from agent.agent.doctype.virtual_machine import virtual_machine
 import frappe
 from uuid import uuid4
 from frappe.model.document import Document
@@ -29,17 +30,76 @@ class PrivateNetwork(Document):
 		if not self.uuid:
 			self.uuid = str(uuid4())
 
-	def on_change(self):
-		# libvirt_connection.networkDefineXML()
+	def before_insert(self):
 		network_config = self.get_config()
 		network = libvirt_connection.networkDefineXMLFlags(network_config)
-		network.destroy()
 		network.create()
+		network.autostart()
 
-		network.setAutostart(True)
+	def on_change(self):
+		from xml.dom.minidom import Document
+		self.network = libvirt_connection.networkLookupByName(self.name)
 
-	def apply_config(self):
-		pass
+		doc_before_save = self.get_doc_before_save()
+		if not doc_before_save:
+			return
+		before_vms = doc_before_save.virtual_machines
+		now_vms = self.virtual_machines
+
+		all_vms_dict = dict()
+		for vm in before_vms+now_vms:
+			all_vms_dict[vm.virtual_machine] = vm
+
+		#NOTE: No modification of mac_address and ip_address assumed
+		newly_added_vms = {i.virtual_machine for i in now_vms}.difference(i.virtual_machine for i in before_vms)
+		newly_removed_vms = {i.virtual_machine for i in before_vms}.difference(i.virtual_machine
+			for i in now_vms)
+
+		for virtual_machine in all_vms_dict.values():
+			# Without fail (almost) gonna be an entry from the current version
+			# and not from doc_before_save. But, still
+			#TODO: Refactor and de-duplicate
+			if not virtual_machine.mac_address:
+				virtual_machine.mac_address = mac_address_generator()
+				virtual_machine.save()
+				virtual_machine.load_from_db()
+
+			if virtual_machine.virtual_machine in newly_added_vms:
+				doc = Document()
+				host = doc.createElement("host")
+				host.setAttribute("mac", virtual_machine.mac_address)
+				host.setAttribute("name", virtual_machine.virtual_machine)
+				host.setAttribute("ip", virtual_machine.ip_address)
+				doc.appendChild(host)
+
+				self.network.update(
+					libvirt.VIR_NETWORK_UPDATE_COMMAND_ADD_LAST,
+					libvirt.VIR_NETWORK_SECTION_IP_DHCP_HOST,
+					0,
+					doc.toxml(),
+					libvirt.VIR_NETWORK_UPDATE_AFFECT_LIVE |
+					libvirt.VIR_NETWORK_UPDATE_AFFECT_CONFIG
+				)
+				frappe.get_doc("Virtual Machine", virtual_machine.virtual_machine).save()
+
+			elif virtual_machine.virtual_machine in newly_removed_vms:
+				doc = Document()
+				# just host is good enough and moreover the lesser the parameters the more
+				# certainty of a match
+				host = doc.createElement("host")
+				host.setAttribute("mac", virtual_machine.mac_address)
+				doc.appendChild(host)
+
+				self.network.update(
+					libvirt.VIR_NETWORK_UPDATE_COMMAND_DELETE,
+					libvirt.VIR_NETWORK_SECTION_IP_DHCP_HOST,
+					0,
+					doc.childNodes[0].toxml(),
+					libvirt.VIR_NETWORK_UPDATE_AFFECT_LIVE |
+					libvirt.VIR_NETWORK_UPDATE_AFFECT_CONFIG
+				)
+				frappe.get_doc("Virtual Machine", virtual_machine.virtual_machine).save()
+
 	def get_config(self):
 		from xml.dom.minidom import Document
 		doc = Document()
