@@ -793,6 +793,17 @@ def get_vm_details_from_instance_id(instance_id):
 	vm_dict["disks"] = new_disks
 	return vm_dict
 
+@frappe.whitelist()
+def terminate(name):
+	vmi_doc = frappe.qb.DocType("Virtual Machine Image")
+	query = (frappe.qb.update(vmi_doc)
+	.where(vmi_doc.virtual_machine == name)
+	.set("virtual_machine", None))
+	query.run()
+
+	vm_doc = frappe.get_doc("Virtual Machine", name)
+	vm_doc.delete()
+
 class RebootLockedException(Exception):
 	def __init__(self):
 		pass
@@ -805,3 +816,4 @@ class RebootFailedException(Exception):
 class ShutdownFailedException(Exception):
 	def __init__(self):
 		pass
+
