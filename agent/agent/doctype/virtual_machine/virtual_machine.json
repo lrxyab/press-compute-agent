@@ -58,14 +58,6 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "state",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "State",
-   "options": "Undefined\nStopped\nRunning\nPaused\nSaved",
-   "reqd": 1
-  },
-  {
    "fieldname": "uuid",
    "fieldtype": "Data",
    "label": "UUID",
@@ -122,12 +114,21 @@
    "label": "Public IP Address",
    "options": "IP Address",
    "set_only_once": 1
+  },
+  {
+   "default": "Undefined",
+   "fieldname": "state",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "State",
+   "options": "Undefined\nStopped\nRunning\nPaused\nSaved",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-01-12 21:56:08.674846",
+ "modified": "2026-02-01 23:14:05.439780",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine",

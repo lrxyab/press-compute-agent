@@ -10,6 +10,7 @@ from uuid import uuid4
 from xml.dom import minidom
 
 import frappe
+from frappe.utils.synchronization import filelock
 import libvirt
 from frappe import DoesNotExistError, _
 from frappe.model.document import Document
@@ -191,17 +192,16 @@ class VirtualMachine(Document):
 		frappe.throw(_("Could not find a disk as the device 'vda'"))
 
 	def set_state(self):
-		if self.get_reboot_lock():
-			raise RebootLockedException
-		match self.state:
-			case "Running":
-				self.start()
-			case "Stopped":
-				frappe.enqueue_doc("Virtual Machine", self.name, "stop")
-			case "Paused":
-				self.pause()
-			case "Undefined":
-				self.undefine()
+		with filelock(self.reboot_lock_key):
+			match self.state:
+				case "Running":
+					self.start()
+				case "Stopped":
+					frappe.enqueue_doc("Virtual Machine", self.name, "stop")
+				case "Paused":
+					self.pause()
+				case "Undefined":
+					self.undefine()
 
 	@frappe.whitelist()
 	def start(self):
@@ -231,13 +231,12 @@ class VirtualMachine(Document):
 			case "Undefined":
 				self.domain = libvirt_connection.defineXMLFlags(self.xml.toxml())
 			case "Running":
-				self.reboot_lock_acquire()
-				self.domain.shutdown()
-				while True:
-					if not self.domain.isActive():
-						break
-				self.state = "Stopped"
-				self.reboot_lock_release()
+				with filelock(self.reboot_lock_key):
+					self.domain.shutdown()
+					while True:
+						if not self.domain.isActive():
+							break
+					self.state = "Stopped"
 
 	@frappe.whitelist()
 	def pause(self):
@@ -260,40 +259,38 @@ class VirtualMachine(Document):
 			self.domain.undefine()
 
 	def _shutdown(self, reboot=False):
-		self.reboot_lock_acquire()
+		with filelock(self.reboot_lock_key):
+			try:
+				import time
 
-		try:
-			import time
+				if self.domain.isActive():
+					self.domain.shutdown()
+				destroyed = False
+				while True:
+					time.sleep(0.1)
+					if not self.domain.isActive():
+						destroyed = True
+						break
+				if not destroyed:
+					frappe.throw("Virtual Machine could not be shut down.")
+			except:
+				raise ShutdownFailedException
 
-			if self.domain.isActive():
-				self.domain.shutdown()
-			destroyed = False
-			while True:
-				time.sleep(0.1)
-				if not self.domain.isActive():
-					destroyed = True
-					break
-			if not destroyed:
-				frappe.throw("Virtual Machine could not be shut down.")
-		except:
-			raise ShutdownFailedException
-
-		if not reboot:
-			self.reboot_lock_release()
-			self.state = "Stopped"
-			self.save()
+			if not reboot:
+				self.state = "Stopped"
+				self.save()
 
 	@frappe.whitelist()
 	def shutdown(self):
 		frappe.enqueue_doc("Virtual Machine", self.name, "_shutdown")
 
 	def _reboot(self):
-		try:
-			self._shutdown(reboot=True)
-			self.domain.create()
-		except:
-			raise RebootFailedException
-		self.reboot_lock_release()
+		with filelock(self.reboot_lock_key):
+			try:
+				self._shutdown(reboot=True)
+				self.domain.create()
+			except:
+				raise RebootFailedException
 
 	@frappe.whitelist()
 	def reboot(self):
@@ -551,19 +548,6 @@ class VirtualMachine(Document):
 	def reboot_lock_key(self):
 		return f"{self.name}-reboot-lock"
 
-
-	def reboot_lock_acquire(self):
-		if self.get_reboot_lock():
-			raise RebootLockedException
-		else:
-			frappe.cache.set_value(self.reboot_lock_key, True, expires_in_sec=600)
-
-	def reboot_lock_release(self):
-		frappe.cache.set_value(self.reboot_lock_key, False)
-
-	def get_reboot_lock(self):
-		return frappe.cache.get_value(self.reboot_lock_key)
-
 	@property
 	def seed_path(self):
 		return str(Path(CONFIG_PATH, "seeds", f"{self.uuid}.img").absolute())
@@ -700,50 +684,53 @@ def _new_vm_from_image(
 	free_ip_addresses = frappe.get_all("IP Address", {"virtual_machine": ("is", "not set")}, pluck="name")
 	unreserved_free_ip_addresses = []
 	for free_ip_address in free_ip_addresses:
-		if not frappe.cache.get_value(ip_address_lock_key(free_ip_address)):
-			unreserved_free_ip_addresses.append(free_ip_address)
+		with filelock(ip_address_lock_key(free_ip_address)):
+			if not frappe.cache.get_value(ip_address_lock_key(free_ip_address)):
+				unreserved_free_ip_addresses.append(free_ip_address)
 
 	if len(unreserved_free_ip_addresses) == 0:
 		frappe.throw("No free public ip address available :(")
 
 	public_ip_address = unreserved_free_ip_addresses[0]
-	frappe.cache.set_value(ip_address_lock_key(public_ip_address), True, expires_in_sec=50)
 
-	vm = frappe.new_doc("Virtual Machine")
-	vm.name = name
-	vm.ssh_key = ssh_key
-	vm.cloud_init = cloud_init
-	vm.public_ip_address = public_ip_address
-	vm.virtual_machine_image = image
-	vm.virtual_machine_type = machine_type
-	vm.root_disk_size = root_disk_size
+	with filelock(ip_address_lock_key(public_ip_address)):
+		frappe.cache.set_value(ip_address_lock_key(public_ip_address), True, expires_in_sec=50)
 
-	# vm.agent = agent.name
+		vm = frappe.new_doc("Virtual Machine")
+		vm.name = name
+		vm.ssh_key = ssh_key
+		vm.cloud_init = cloud_init
+		vm.public_ip_address = public_ip_address
+		vm.virtual_machine_image = image
+		vm.virtual_machine_type = machine_type
+		vm.root_disk_size = root_disk_size
 
-	vm.insert()
+		# vm.agent = agent.name
 
-	# can be linked now
-	frappe.db.set_value("IP Address", public_ip_address, "virtual_machine", name)
+		vm.insert()
 
-	if private_network:
-		private_network_doc = frappe.get_doc("Private Network", private_network)
-		private_network_doc.append(
-			"virtual_machines",
-			{
-				"virtual_machine": vm.name,
-				"ip_address": private_ip_address
-			},
-		)
-		private_network_doc.save()
+		# can be linked now
+		frappe.db.set_value("IP Address", public_ip_address, "virtual_machine", name)
 
-	vm.load_from_db()
+		if private_network:
+			private_network_doc = frappe.get_doc("Private Network", private_network)
+			private_network_doc.append(
+				"virtual_machines",
+				{
+					"virtual_machine": vm.name,
+					"ip_address": private_ip_address
+				},
+			)
+			private_network_doc.save()
 
-	# vm.load_from_db()
-	vm.state = "Running"
-	vm.save()
+		vm.load_from_db()
 
-	# this will be the instance_id to track the VM state
-	return vm.uuid
+		# vm.load_from_db()
+		vm.state = "Running"
+		vm.save()
+
+		# this will be the instance_id to track the VM state
+		return vm.uuid
 
 @frappe.whitelist()
 def new_vm_from_image(
