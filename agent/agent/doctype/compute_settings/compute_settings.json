@@ -6,7 +6,9 @@
  "engine": "InnoDB",
  "field_order": [
   "is_orchestrator",
-  "default_network_interface"
+  "default_network_interface",
+  "private_ip",
+  "private_network_interface"
  ],
  "fields": [
   {
@@ -24,13 +26,23 @@
    "in_list_view": 1,
    "label": "Default Network Interface",
    "mandatory_depends_on": "eval:!doc.is_orchestrator"
+  },
+  {
+   "fieldname": "private_ip",
+   "fieldtype": "Data",
+   "label": "Private IP"
+  },
+  {
+   "fieldname": "private_network_interface",
+   "fieldtype": "Data",
+   "label": "Private Network Interface"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-12-18 16:54:03.820115",
+ "modified": "2026-01-23 10:07:19.635688",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Compute Settings",
