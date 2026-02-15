@@ -1,9 +1,10 @@
-import os
-import shutil
-import libvirt
+import subprocess
 import time
 from xml.dom.minidom import Document
-import subprocess
+
+import libvirt
+
+
 class VMBackup:
 	def __init__(self, domain: libvirt.virDomain):
 		self.domain = domain
@@ -31,8 +32,7 @@ class VMBackup:
 	def begin(self):
 		self.domain.suspend()
 
-		self.domain.blockCopy(self.disk_device, self.xml, None,
-						libvirt.VIR_DOMAIN_BLOCK_COPY_TRANSIENT_JOB)
+		self.domain.blockCopy(self.disk_device, self.xml, None, libvirt.VIR_DOMAIN_BLOCK_COPY_TRANSIENT_JOB)
 
 		while True:
 			_, completed = self.get_status()
@@ -40,8 +40,10 @@ class VMBackup:
 				break
 			time.sleep(0.3)
 
-		self.domain.blockJobAbort(self.disk_device, libvirt.VIR_DOMAIN_BLOCK_JOB_ABORT_PIVOT |
-			libvirt.VIR_DOMAIN_BLOCK_COPY_REUSE_EXT)
+		self.domain.blockJobAbort(
+			self.disk_device,
+			libvirt.VIR_DOMAIN_BLOCK_JOB_ABORT_PIVOT | libvirt.VIR_DOMAIN_BLOCK_COPY_REUSE_EXT,
+		)
 		self.domain.resume()
 		# add `<your_user> ALL=\(ALL\) NOPASSWD: /user/bin/chmod` to /etc/sudoers
 		subprocess.call(["sudo", "chmod", "777", self.destination])
@@ -53,4 +55,4 @@ class VMBackup:
 			return 1, True
 		if info["cur"] == info["end"]:
 			return 1, True
-		return info["cur"]/info["end"], False
+		return info["cur"] / info["end"], False

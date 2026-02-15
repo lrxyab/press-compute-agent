@@ -1,14 +1,16 @@
 # Copyright (c) 2025, ayush@frappe.io and contributors
 # For license information, please see license.txt
 
-from agent.agent.doctype.virtual_machine import virtual_machine
-import frappe
+import ipaddress
 from uuid import uuid4
+
+import frappe
+import libvirt
 from frappe.model.document import Document
+from pyroute2 import IPRoute
+
 from agent.configuration.connections import libvirt_connection
 
-import ipaddress
-import libvirt
 
 class PrivateNetwork(Document):
 	# begin: auto-generated types
@@ -17,12 +19,16 @@ class PrivateNetwork(Document):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
-		from agent.agent.doctype.private_network_machines.private_network_machines import PrivateNetworkMachines
 		from frappe.types import DF
+
+		from agent.agent.doctype.private_network_machines.private_network_machines import (
+			PrivateNetworkMachines,
+		)
 
 		cidr_block: DF.Data
 		uuid: DF.Data | None
 		virtual_machines: DF.Table[PrivateNetworkMachines]
+		vlan_id: DF.Int
 	# end: auto-generated types
 
 	def __init__(self, *args, **kwargs):
@@ -38,6 +44,7 @@ class PrivateNetwork(Document):
 
 	def on_change(self):
 		from xml.dom.minidom import Document
+
 		self.network = libvirt_connection.networkLookupByName(self.name)
 
 		doc_before_save = self.get_doc_before_save()
@@ -47,18 +54,21 @@ class PrivateNetwork(Document):
 		now_vms = self.virtual_machines
 
 		all_vms_dict = dict()
-		for vm in before_vms+now_vms:
+		for vm in before_vms + now_vms:
 			all_vms_dict[vm.virtual_machine] = vm
 
-		#NOTE: No modification of mac_address and ip_address assumed
-		newly_added_vms = {i.virtual_machine for i in now_vms}.difference(i.virtual_machine for i in before_vms)
-		newly_removed_vms = {i.virtual_machine for i in before_vms}.difference(i.virtual_machine
-			for i in now_vms)
+		# NOTE: No modification of mac_address and ip_address assumed
+		newly_added_vms = {i.virtual_machine for i in now_vms}.difference(
+			i.virtual_machine for i in before_vms
+		)
+		newly_removed_vms = {i.virtual_machine for i in before_vms}.difference(
+			i.virtual_machine for i in now_vms
+		)
 
 		for virtual_machine in all_vms_dict.values():
 			# Without fail (almost) gonna be an entry from the current version
 			# and not from doc_before_save. But, still
-			#TODO: Refactor and de-duplicate
+			# TODO: Refactor and de-duplicate
 			if not virtual_machine.mac_address:
 				virtual_machine.mac_address = mac_address_generator()
 				virtual_machine.save()
@@ -77,8 +87,7 @@ class PrivateNetwork(Document):
 					libvirt.VIR_NETWORK_SECTION_IP_DHCP_HOST,
 					0,
 					doc.toxml(),
-					libvirt.VIR_NETWORK_UPDATE_AFFECT_LIVE |
-					libvirt.VIR_NETWORK_UPDATE_AFFECT_CONFIG
+					libvirt.VIR_NETWORK_UPDATE_AFFECT_LIVE | libvirt.VIR_NETWORK_UPDATE_AFFECT_CONFIG,
 				)
 				frappe.get_doc("Virtual Machine", virtual_machine.virtual_machine).save()
 
@@ -95,13 +104,13 @@ class PrivateNetwork(Document):
 					libvirt.VIR_NETWORK_SECTION_IP_DHCP_HOST,
 					0,
 					doc.childNodes[0].toxml(),
-					libvirt.VIR_NETWORK_UPDATE_AFFECT_LIVE |
-					libvirt.VIR_NETWORK_UPDATE_AFFECT_CONFIG
+					libvirt.VIR_NETWORK_UPDATE_AFFECT_LIVE | libvirt.VIR_NETWORK_UPDATE_AFFECT_CONFIG,
 				)
 				frappe.get_doc("Virtual Machine", virtual_machine.virtual_machine).save()
 
 	def get_config(self):
 		from xml.dom.minidom import Document
+
 		doc = Document()
 
 		network = doc.createElement("network")
@@ -133,7 +142,7 @@ class PrivateNetwork(Document):
 		dhcp.appendChild(rng)
 
 		for virtual_machine in self.virtual_machines:
-			mac_address = mac_address_generator()
+			mac_address_generator()
 			if not virtual_machine.mac_address:
 				virtual_machine.mac_address = mac_address_generator()
 				virtual_machine.save()
@@ -146,7 +155,6 @@ class PrivateNetwork(Document):
 
 			virtual_machine_doc = frappe.get_doc("Virtual Machine", virtual_machine.virtual_machine)
 			virtual_machine_doc.save()
-
 
 		return doc.toprettyxml(indent="  ")
 
@@ -173,8 +181,31 @@ class PrivateNetwork(Document):
 	def netmask(self):
 		return str(self._network_object.netmask)
 
+	@property
+	def vxlan_interface_name(self):
+		return f"vxlan-{self.name}"
+
+	@property
+	def vxlan_bridge_interface_name(self):
+		return f"vxlan-bridge-{self.name}"
+
+	def create_vxlan_and_bridge(self):
+		ip = IPRoute()
+		ip.link("add", ifname=self.vxlan_bridge_interface_name, kind="bridge")
+		bridge_if_idx = ip.link_lookup(ifname=self.vxlan_bridge_interface_name)[0]
+		ip.link("set", index=bridge_if_idx, state="up")
+
+		ip.link("add", ifname=self.vxlan_interface_name, kind="vxlan", vxlan_id=vxlan_id, vxlan_port=4789)
+		vxlan_if_index = ip.link_lookup(ifname=self.vxlan_interface_name)[0]
+		ip.link("set", index=vxlan_if_index, state="up")
+
+		# attach vxlan to bridge
+		ip.link("set", index=vxlan_if_index, master=bridge_if_idx)
+
+
 def mac_address_generator():
 	import random
+
 	nums = "0123456789abcdef"
 	mac = list("52:54:00")
 	for i in range(9, 18):
@@ -183,3 +214,29 @@ def mac_address_generator():
 		else:
 			mac.append(random.choice(nums))
 	return "".join(mac)
+
+
+def create_dns_masq_config():
+	private_networks = frappe.get_all(
+		"Private Network", fields=["name", "cidr_block", "vlan_id", "virtual_machine", "ip_address"]
+	)
+	private_networks_map = dict()
+	for private_network in private_networks:
+		private_networks_map[private_network.name] = private_network
+
+	for virtual_machine in virtual_machines:
+		private_networks_map[virtual_machine.parent]
+
+
+def create_dhcp_hosts_config():
+	virtual_machines = frappe.get_all("Private Network Machines", fields=["mac_address", "ip_address"])
+	return "\n".join(
+		[
+			f"{virtual_machine.mac_address},{virtual_machine.ip_address}"
+			for virtual_machine in virtual_machines
+		]
+	)
+
+
+def save_dhcp_hosts_config():
+	create_dhcp_hosts_config()

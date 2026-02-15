@@ -8,7 +8,8 @@
  "field_order": [
   "cidr_block",
   "uuid",
-  "virtual_machines"
+  "virtual_machines",
+  "vlan_id"
  ],
  "fields": [
   {
@@ -29,12 +30,18 @@
    "fieldtype": "Data",
    "label": "UUID",
    "read_only": 1
+  },
+  {
+   "fieldname": "vlan_id",
+   "fieldtype": "Int",
+   "label": "VLAN ID",
+   "reqd": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-01-06 10:13:07.040371",
+ "modified": "2026-01-23 12:58:52.657617",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Private Network",

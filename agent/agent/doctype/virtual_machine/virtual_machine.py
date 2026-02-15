@@ -5,18 +5,17 @@ import os
 import shutil
 import subprocess
 import tempfile
+from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 from xml.dom import minidom
 
 import frappe
-from frappe.utils.synchronization import filelock
 import libvirt
-from frappe import DoesNotExistError, _
+from frappe import _
 from frappe.model.document import Document
 from frappe.utils.caching import redis_cache
-
-from pathlib import Path
+from frappe.utils.synchronization import filelock
 
 from agent.configuration.configs import XML_CONFIG
 from agent.configuration.connections import libvirt_connection
@@ -41,9 +40,10 @@ class VirtualMachine(Document):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
+		from frappe.types import DF
+
 		from agent.agent.doctype.network_interface.network_interface import NetworkInterface
 		from agent.agent.doctype.vm_disk.vm_disk import VMDisk
-		from frappe.types import DF
 
 		cloud_init: DF.Code | None
 		disks: DF.Table[VMDisk]
@@ -91,22 +91,25 @@ class VirtualMachine(Document):
 				root_disk.insert()
 				self.append("disks", {"disk": root_disk.name, "device": "vda"})
 
-
 			self.domain = self.apply_config()
 			self.set_state()
 			# assuming that a seed image named {self.uuid}.img is always created because this is
 			# hardcoded in the config in the previous step
 			self.apply_image_config()
 			if self.public_ip_address:
-				mac_address = frappe.db.get_value("IP Address", self.public_ip_address,
-									  "mac_address")
-				default_network_interface = frappe.db.get_single_value("Compute Settings", "default_network_interface")
+				mac_address = frappe.db.get_value("IP Address", self.public_ip_address, "mac_address")
+				default_network_interface = frappe.db.get_single_value(
+					"Compute Settings", "default_network_interface"
+				)
 
-				self.append("network_interfaces", {
-					"name1": default_network_interface,
-					"type": "Direct",
-					"mac_address": mac_address,
-				})
+				self.append(
+					"network_interfaces",
+					{
+						"name1": default_network_interface,
+						"type": "Direct",
+						"mac_address": mac_address,
+					},
+				)
 
 	def validate(self):
 		if self.polled:
@@ -115,7 +118,7 @@ class VirtualMachine(Document):
 		# sunsetting this since there is a forced creation of root disk
 		# self.validate_root_device_exists()
 
-	def on_change(self):
+	def on_change(self):  # noqa: C901
 		if self.polled:
 			return
 		if is_orchestrator():
@@ -124,7 +127,7 @@ class VirtualMachine(Document):
 			call_to_agent = ComputeCall(self.agent)
 			try:
 				doc_dict = call_to_agent.update_doc("Virtual Machine", self.name, self.as_dict())
-			except:
+			except Exception:
 				return
 			try:
 				self.update(doc_dict)
@@ -167,8 +170,9 @@ class VirtualMachine(Document):
 			frappe.db.set_value("IP Address", self.public_ip_address, "virtual_machine", None)
 
 		# bad naming.
-		private_network_children = frappe.get_all("Private Network Machines", {"virtual_machine":
-																		 self.name}, pluck="name")
+		private_network_children = frappe.get_all(
+			"Private Network Machines", {"virtual_machine": self.name}, pluck="name"
+		)
 		for private_network_child in private_network_children:
 			grid_doc = frappe.get_doc("Private Network Machines", private_network_child)
 			grid_doc.delete()
@@ -176,7 +180,7 @@ class VirtualMachine(Document):
 		self.undefine()
 
 	def after_delete(self):
-		#delete the root volume
+		# delete the root volume
 		for disk in self.disks:
 			if disk.device == "vda":
 				frappe.get_doc("Disk", disk.disk).delete()
@@ -249,7 +253,7 @@ class VirtualMachine(Document):
 		if not self.domain:
 			try:
 				self.domain = libvirt_connection.lookupByName(self.name)
-			except:
+			except Exception:
 				# if it does not exist no extra effort needed
 				return
 		if self.domain:
@@ -273,8 +277,8 @@ class VirtualMachine(Document):
 						break
 				if not destroyed:
 					frappe.throw("Virtual Machine could not be shut down.")
-			except:
-				raise ShutdownFailedException
+			except Exception:
+				raise ShutdownFailedException from None
 
 			if not reboot:
 				self.state = "Stopped"
@@ -289,8 +293,8 @@ class VirtualMachine(Document):
 			try:
 				self._shutdown(reboot=True)
 				self.domain.create()
-			except:
-				raise RebootFailedException
+			except Exception:
+				raise RebootFailedException from None
 
 	@frappe.whitelist()
 	def reboot(self):
@@ -300,8 +304,8 @@ class VirtualMachine(Document):
 		self.xml = get_new_config()
 		self.create_config()
 		if self.state != "Undefined":
-			dom = libvirt_connection.defineXMLFlags(self.xml.toxml())
-			return dom
+			return libvirt_connection.defineXMLFlags(self.xml.toxml())
+		return None
 
 	# the most important function
 	# takes parameters from the document and converts them to XML
@@ -337,8 +341,7 @@ class VirtualMachine(Document):
 		for disk in self.disks:
 			disk_doc = frappe.get_doc("Disk", disk.disk)
 			file_path = disk_doc.get_path()
-			disk_elem = self.create_disk_config(file_path=file_path, dev=disk.device,
-									   disk_type="Volume")
+			disk_elem = self.create_disk_config(file_path=file_path, dev=disk.device, disk_type="Volume")
 			devices.appendChild(disk_elem)
 
 		seed_elem = self.create_disk_config(file_path=self.seed_path, dev="sda", disk_type="Seed")
@@ -347,7 +350,7 @@ class VirtualMachine(Document):
 		self.device_config = devices
 
 	def create_disk_config(self, file_path: str, dev: str, disk_type: Literal["Volume", "Seed"]):
-		disk_device  = {"Volume": "disk", "Seed": "cdrom"}[disk_type]
+		disk_device = {"Volume": "disk", "Seed": "cdrom"}[disk_type]
 		driver_type = {"Volume": "qcow2", "Seed": "raw"}[disk_type]
 		target_bus = {"Volume": "virtio", "Seed": "sata"}[disk_type]
 
@@ -357,7 +360,7 @@ class VirtualMachine(Document):
 
 		driver = self.xml.createElement("driver")
 		driver.setAttribute("name", "qemu")
-		driver.setAttribute("type",driver_type)
+		driver.setAttribute("type", driver_type)
 		disk_elem.appendChild(driver)
 
 		source = self.xml.createElement("source")
@@ -488,7 +491,6 @@ class VirtualMachine(Document):
 		return self.load_from_db().as_dict()
 
 	def apply_image_config(self):
-
 		# try:
 		# 	public_ip_address = self.allocate_public_ip()
 		# except:
@@ -501,43 +503,43 @@ class VirtualMachine(Document):
 			user_data = frappe.render_template(
 				"agent/agent/doctype/virtual_machine/user-data.jinja2",
 				context={"ip_address": self.public_ip_address, "ssh_key": self.ssh_key},
-				is_path=True
+				is_path=True,
 			)
 
 		meta_data = frappe.render_template(
 			"agent/agent/doctype/virtual_machine/meta-data.jinja2",
 			context={"instance_id": self.uuid, "local_hostname": self.name},
-			is_path=True
+			is_path=True,
 		)
 
 		network_config = frappe.render_template(
 			"agent/agent/doctype/virtual_machine/network-config.jinja2",
 			context={"ip_address": self.public_ip_address},
-			is_path=True
+			is_path=True,
 		)
 
 		with tempfile.TemporaryDirectory() as d:
 			temp_path = Path(d)
-			user_data_path = (temp_path / "user-data")
+			user_data_path = temp_path / "user-data"
 			user_data_path.write_text(user_data)
-			meta_data_path = (temp_path / "meta-data")
+			meta_data_path = temp_path / "meta-data"
 			meta_data_path.write_text(meta_data)
-			network_config_path = (temp_path / "network-config")
+			network_config_path = temp_path / "network-config"
 			network_config_path.write_text(network_config)
-
 
 			try:
 				subprocess.run(
-					["genisoimage",
-					"-output",
-					self.seed_path,
-					"-volid",
-					"cidata",
-					"-rational-rock",
-					"-joliet",
-	 				str(temp_path.absolute()),
-     				],
-					check=True
+					[
+						"genisoimage",
+						"-output",
+						self.seed_path,
+						"-volid",
+						"cidata",
+						"-rational-rock",
+						"-joliet",
+						str(temp_path.absolute()),
+					],
+					check=True,
 				)
 			except Exception as e:
 				frappe.throw(f"{e}")
@@ -581,13 +583,14 @@ def generate_disk_xml(disk: str, dev: str):
 
 
 def get_new_config():
-	xml = minidom.parseString(XML_CONFIG)
-	return xml
+	return minidom.parseString(XML_CONFIG)
 
 
 # TODO: better, consistent naming
 @frappe.whitelist(methods=["POST"], allow_guest=True)
-def update_details(vm_details=[]):
+def update_details(vm_details=None):  # noqa: C901
+	if vm_details is None:
+		vm_details = []
 	disks_map = get_all_disks()
 
 	all_vms = set(frappe.get_all("Virtual Machine", {"state": ("!=", "Undefined")}, pluck="name"))
@@ -617,7 +620,7 @@ def update_details(vm_details=[]):
 			try:
 				name = disks_map[vm_detail_disk["file_path"]]
 				true_vm_disks.append({"disk": name, "device": vm_detail_disk["device"]})
-			except Exception as e:
+			except Exception:
 				continue
 
 		vm_disks = [{"disk": i.name, "device": i.device} for i in vm_doc.disks]
@@ -636,8 +639,7 @@ def update_details(vm_details=[]):
 def get_all_disks():
 	disk_doc = frappe.qb.DocType("Disk")
 	query = disk_doc.select("name", "file_path")
-	disks_map = {i.file_path: i.name for i in query.run(as_dict=True)}
-	return disks_map
+	return {i.file_path: i.name for i in query.run(as_dict=True)}
 
 
 def parse_machine_details(xml_string: str):
@@ -677,10 +679,11 @@ def _new_vm_from_image(
 	# if agent == None:
 	# 	agent = random.choice(frappe.db.get_all("Agent", ["name", "default_network_interface"]))
 
-
 	# public ip allocation
 	# shmort locking mechanism
-	ip_address_lock_key = lambda address: f"{address}-ip-address-lock"
+	def ip_address_lock_key(address):
+		return f"{address}-ip-address-lock"
+
 	free_ip_addresses = frappe.get_all("IP Address", {"virtual_machine": ("is", "not set")}, pluck="name")
 	unreserved_free_ip_addresses = []
 	for free_ip_address in free_ip_addresses:
@@ -716,10 +719,7 @@ def _new_vm_from_image(
 			private_network_doc = frappe.get_doc("Private Network", private_network)
 			private_network_doc.append(
 				"virtual_machines",
-				{
-					"virtual_machine": vm.name,
-					"ip_address": private_ip_address
-				},
+				{"virtual_machine": vm.name, "ip_address": private_ip_address},
 			)
 			private_network_doc.save()
 
@@ -731,6 +731,7 @@ def _new_vm_from_image(
 
 		# this will be the instance_id to track the VM state
 		return vm.uuid
+
 
 @frappe.whitelist()
 def new_vm_from_image(
@@ -744,23 +745,23 @@ def new_vm_from_image(
 	cloud_init=None,
 	root_disk_size=None,
 ):
-
 	# TODO: after profiling, it seems that disk creation takes the most time
 	# safely enqueue it in such a way it doesn't affect functionality
 	# nevertheless, after moving away from virt-customize, the speed boosts
 	# are good enough to be able to afford the creation of the VM to be synchronous
 	# still keeping this structure if in the future there is a need to enqueue creation
-    return _new_vm_from_image(
-        name=name,
-        image=image,
-        machine_type=machine_type,
-        private_ip_address=private_ip_address,
-        agent=agent,
-        private_network=private_network,
-        ssh_key=ssh_key,
-        cloud_init=cloud_init,
-        root_disk_size=root_disk_size,
-    )
+	return _new_vm_from_image(
+		name=name,
+		image=image,
+		machine_type=machine_type,
+		private_ip_address=private_ip_address,
+		agent=agent,
+		private_network=private_network,
+		ssh_key=ssh_key,
+		cloud_init=cloud_init,
+		root_disk_size=root_disk_size,
+	)
+
 
 @frappe.whitelist(methods=["GET"])
 def get_vm_details_from_instance_id(instance_id):
@@ -768,7 +769,9 @@ def get_vm_details_from_instance_id(instance_id):
 	vm_dict = vm_doc.as_dict()
 
 	# private ip addresses
-	vm_dict["private_ip_addresses"] = frappe.get_all("Private Network Machines", {"virtual_machine": vm_doc.name}, pluck="ip_address")
+	vm_dict["private_ip_addresses"] = frappe.get_all(
+		"Private Network Machines", {"virtual_machine": vm_doc.name}, pluck="ip_address"
+	)
 	new_disks = []
 
 	for disk in vm_dict["disks"]:
@@ -780,16 +783,16 @@ def get_vm_details_from_instance_id(instance_id):
 	vm_dict["disks"] = new_disks
 	return vm_dict
 
+
 @frappe.whitelist()
 def terminate(name):
 	vmi_doc = frappe.qb.DocType("Virtual Machine Image")
-	query = (frappe.qb.update(vmi_doc)
-	.where(vmi_doc.virtual_machine == name)
-	.set("virtual_machine", None))
+	query = frappe.qb.update(vmi_doc).where(vmi_doc.virtual_machine == name).set("virtual_machine", None)
 	query.run()
 
 	vm_doc = frappe.get_doc("Virtual Machine", name)
 	vm_doc.delete()
+
 
 class RebootLockedException(Exception):
 	def __init__(self):
@@ -800,7 +803,7 @@ class RebootFailedException(Exception):
 	def __init__(self):
 		pass
 
+
 class ShutdownFailedException(Exception):
 	def __init__(self):
 		pass
-
