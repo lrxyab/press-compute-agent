@@ -490,6 +490,63 @@ class VirtualMachine(Document):
 		self.save()
 		return self.load_from_db().as_dict()
 
+	def take_snapshot(self, device):
+		from xml.dom.minidom import Document
+
+		snapshot_uuid = str(uuid4())
+
+		doc = Document()
+
+		domainsnapshot = doc.createElement("domainsnapshot")
+		doc.appendChild(domainsnapshot)
+
+		name = doc.createElement("name")
+		name_text = doc.createTextNode(snapshot_uuid)
+		name.appendChild(name_text)
+		domainsnapshot.appendChild(name)
+
+		disks = doc.createElement("disks")
+		domainsnapshot.appendChild(disks)
+
+		disk = doc.createElement("disk")
+		disk.setAttribute("name", device)
+		disk.setAttribute("snapshot", "external")
+		disks.appendChild(disk)
+
+		source = doc.createElement("source")
+		source.setAttribute("file", str(Path(CONFIG_PATH, "disks", f"{snapshot_uuid}.qcow2")))
+		disk.appendChild(source)
+
+		memory = doc.createElement("memory")
+		memory.setAttribute("snapshot", "no")
+		disk.appendChild(memory)
+
+		snapshot_xml = doc.toprettyxml(indent="  ")
+		flags = libvirt.VIR_DOMAIN_SNAPSHOT_CREATE_DISK_ONLY | libvirt.VIR_DOMAIN_SNAPSHOT_CREATE_ATOMIC
+
+		self.domain.snapshotCreateXML(snapshot_xml, flags)
+
+		backing_disk_name = ""
+		for disk in self.disks:
+			if disk.device == device:
+				backing_disk_name = disk.disk
+				break
+
+		snapshot_disk = frappe.new_doc("Disk")
+		snapshot_disk.is_snapshot = True
+		snapshot_disk.name = snapshot_uuid
+		snapshot_disk.uuid = snapshot_uuid
+		snapshot_disk.backing_file = backing_disk_name
+		snapshot_disk.insert()
+
+		for disk in self.disks:
+			if disk.device == device:
+				disk.disk = snapshot_disk.name
+				disk.save()
+				break
+
+		self.save()
+
 	def apply_image_config(self):
 		# try:
 		# 	public_ip_address = self.allocate_public_ip()
