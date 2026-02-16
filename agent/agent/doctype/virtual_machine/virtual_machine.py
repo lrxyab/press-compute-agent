@@ -341,8 +341,23 @@ class VirtualMachine(Document):
 		for disk in self.disks:
 			disk_doc = frappe.get_doc("Disk", disk.disk)
 			file_path = disk_doc.get_path()
+			backing_chain = []
+			if disk_doc.is_snapshot:
+				current_disk_doc = disk_doc
+				while True:
+					backing_disk_doc = frappe.get_doc("Disk", current_disk_doc.backing_file)
+					backing_chain.append(backing_disk_doc.get_path())
+					current_disk_doc = backing_disk_doc
+
+					if not current_disk_doc.is_snapshot:
+						break
+
 			disk_elem = self.create_disk_config(
-				file_path=file_path, dev=disk.device, disk_type="Volume", parent_xml=self.xml
+				file_path=file_path,
+				dev=disk.device,
+				disk_type="Volume",
+				parent_xml=self.xml,
+				backing_chain=backing_chain,
 			)
 			devices.appendChild(disk_elem)
 
@@ -353,7 +368,11 @@ class VirtualMachine(Document):
 
 		self.device_config = devices
 
-	def create_disk_config(self, file_path: str, dev: str, disk_type: Literal["Volume", "Seed"], parent_xml):
+	def create_disk_config(
+		self, file_path: str, dev: str, disk_type: Literal["Volume", "Seed"], parent_xml, backing_chain=None
+	):
+		if not backing_chain:
+			backing_chain = []
 		disk_device = {"Volume": "disk", "Seed": "cdrom"}[disk_type]
 		driver_type = {"Volume": "qcow2", "Seed": "raw"}[disk_type]
 		target_bus = {"Volume": "virtio", "Seed": "sata"}[disk_type]
@@ -362,16 +381,32 @@ class VirtualMachine(Document):
 		disk_elem.setAttribute("type", "file")
 		disk_elem.setAttribute("device", disk_device)
 
-		driver = self.xml.createElement("driver")
+		driver = parent_xml.createElement("driver")
 		driver.setAttribute("name", "qemu")
 		driver.setAttribute("type", driver_type)
 		disk_elem.appendChild(driver)
 
-		source = self.xml.createElement("source")
+		source = parent_xml.createElement("source")
 		source.setAttribute("file", file_path)
 		disk_elem.appendChild(source)
 
-		target = self.xml.createElement("target")
+		backing_parent_xml = disk_elem
+		for backing_file in backing_chain:
+			backing_store = parent_xml.createElement("backingStore")
+			backing_store.setAttribute("type", "file")
+			backing_parent_xml.appendChild(backing_store)
+
+			backing_store_format = parent_xml.createElement("format")
+			backing_store_format.setAttribute("type", "qcow2")
+			backing_store.appendChild(backing_store_format)
+
+			backing_store_source = parent_xml.createElement("source")
+			backing_store_source.setAttribute("file", backing_file)
+			backing_store.appendChild(backing_store_source)
+
+			backing_parent_xml = backing_store
+
+		target = parent_xml.createElement("target")
 		target.setAttribute("dev", dev)
 		target.setAttribute("bus", target_bus)
 		disk_elem.appendChild(target)
