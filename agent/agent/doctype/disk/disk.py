@@ -25,8 +25,10 @@ class Disk(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
+		backing_file: DF.Link | None
 		file_path: DF.Data | None
 		is_primary_disk: DF.Check
+		is_snapshot: DF.Check
 		size: DF.Float
 		uuid: DF.Data | None
 		virtual_machine_image: DF.Link | None
@@ -47,6 +49,8 @@ class Disk(Document):
 			doc_dict = call_to_agent.create_doc("Disk", self.as_dict())
 			self.update(doc_dict)
 		else:
+			if self.is_snapshot:
+				return
 			if self.is_primary_disk:
 				self.create_system_image()
 				self.set_disk_size()
@@ -72,6 +76,8 @@ class Disk(Document):
 			self.update(doc_dict)
 
 		else:
+			if self.is_snapshot:
+				return
 			if self.has_value_changed("size"):
 				self.set_disk_size()
 

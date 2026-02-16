@@ -121,14 +121,13 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "State",
-   "options": "Undefined\nStopped\nRunning\nPaused\nSaved",
-   "read_only": 1
+   "options": "Undefined\nStopped\nRunning\nPaused\nSaved"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-01 23:14:05.439780",
+ "modified": "2026-02-16 04:34:24.641460",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine",

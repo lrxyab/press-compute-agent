@@ -11,7 +11,9 @@
   "is_primary_disk",
   "uuid",
   "column_break_ztmf",
-  "file_path"
+  "file_path",
+  "backing_file",
+  "is_snapshot"
  ],
  "fields": [
   {
@@ -19,8 +21,7 @@
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Size",
-   "non_negative": 1,
-   "reqd": 1
+   "non_negative": 1
   },
   {
    "fieldname": "uuid",
@@ -51,16 +52,28 @@
    "label": "Virtual Machine Image",
    "mandatory_depends_on": "eval: doc.is_primary_disk",
    "options": "Virtual Machine Image"
+  },
+  {
+   "fieldname": "backing_file",
+   "fieldtype": "Link",
+   "label": "Backing File",
+   "options": "Disk"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_snapshot",
+   "fieldtype": "Check",
+   "label": "Is Snapshot"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-01-09 11:23:39.229438",
+ "modified": "2026-02-16 05:33:12.854471",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Disk",
- "naming_rule": "Expression",
+ "naming_rule": "Expression (old style)",
  "owner": "Administrator",
  "permissions": [
   {
