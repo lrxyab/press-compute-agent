@@ -341,20 +341,24 @@ class VirtualMachine(Document):
 		for disk in self.disks:
 			disk_doc = frappe.get_doc("Disk", disk.disk)
 			file_path = disk_doc.get_path()
-			disk_elem = self.create_disk_config(file_path=file_path, dev=disk.device, disk_type="Volume")
+			disk_elem = self.create_disk_config(
+				file_path=file_path, dev=disk.device, disk_type="Volume", parent_xml=self.xml
+			)
 			devices.appendChild(disk_elem)
 
-		seed_elem = self.create_disk_config(file_path=self.seed_path, dev="sda", disk_type="Seed")
+		seed_elem = self.create_disk_config(
+			file_path=self.seed_path, dev="sda", disk_type="Seed", parent_xml=self.xml
+		)
 		devices.appendChild(seed_elem)
 
 		self.device_config = devices
 
-	def create_disk_config(self, file_path: str, dev: str, disk_type: Literal["Volume", "Seed"]):
+	def create_disk_config(self, file_path: str, dev: str, disk_type: Literal["Volume", "Seed"], parent_xml):
 		disk_device = {"Volume": "disk", "Seed": "cdrom"}[disk_type]
 		driver_type = {"Volume": "qcow2", "Seed": "raw"}[disk_type]
 		target_bus = {"Volume": "virtio", "Seed": "sata"}[disk_type]
 
-		disk_elem = self.xml.createElement("disk")
+		disk_elem = parent_xml.createElement("disk")
 		disk_elem.setAttribute("type", "file")
 		disk_elem.setAttribute("device", disk_device)
 
@@ -371,7 +375,6 @@ class VirtualMachine(Document):
 		target.setAttribute("dev", dev)
 		target.setAttribute("bus", target_bus)
 		disk_elem.appendChild(target)
-		print(disk_elem.toxml())
 
 		return disk_elem
 
@@ -449,7 +452,9 @@ class VirtualMachine(Document):
 			devices.appendChild(interface)
 
 	def attach_disk(self, disk: str, dev: str):
-		xml = generate_disk_xml(disk, dev)
+		from xml.dom import minidom
+
+		xml = self.create_disk_config(disk, dev, "Volume", minidom.Document())
 
 		self.domain.attachDeviceFlags(xml, libvirt.VIR_DOMAIN_AFFECT_LIVE)
 
