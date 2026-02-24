@@ -27,7 +27,7 @@ def get_system_state():
 	return docs
 
 
-# for doctype methheads
+# for doctype methods
 @frappe.whitelist()
 def forward_to_agent(func):
 	@wraps(func)
@@ -40,7 +40,12 @@ def forward_to_agent(func):
 		func(*args, **kwargs)
 
 	return forward_to_agent_if_orchestrator
-	# if is_orchestrator():
-	# 	ComputeCall
-	#
-	# else:
+
+
+# available memory without overprovisioning
+@frappe.whitelist()
+def get_free_memory():
+	import psutil
+
+	memory_used = frappe.get_value("Virtual Machine", {}, [{"SUM": "memory"}])
+	return psutil.virtual_memory().total / (1024**3) - memory_used * 1000 / 1024
