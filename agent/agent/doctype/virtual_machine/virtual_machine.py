@@ -240,7 +240,8 @@ class VirtualMachine(Document):
 					while True:
 						if not self.domain.isActive():
 							break
-					self.state = "Stopped"
+		self.state = "Stopped"
+		self.save()
 
 	@frappe.whitelist()
 	def pause(self):
@@ -261,6 +262,8 @@ class VirtualMachine(Document):
 				self.domain.destroy()
 
 			self.domain.undefine()
+		self.state = "Undefined"
+		self.save()
 
 	def _shutdown(self, reboot=False):
 		with filelock(self.reboot_lock_key):
@@ -524,11 +527,10 @@ class VirtualMachine(Document):
 
 	# volumes should be of the format {"disk": <disk_name>, "device": <device_name>}
 	@frappe.whitelist()
-	def attach_volumes(self, volumes):
+	def attach_volumes(self, volumes: list):
 		for volume in volumes:
 			self.append("disks", volume)
 		self.save()
-		return self.load_from_db().as_dict()
 
 	def take_snapshot(self, device):
 		from xml.dom.minidom import Document
@@ -765,7 +767,7 @@ def _new_vm_from_image(
 	name,
 	image,
 	machine_type,
-	private_ip_address,
+	private_ip_address=None,
 	agent=None,
 	private_network=None,
 	ssh_key=None,
@@ -835,8 +837,7 @@ def new_vm_from_image(
 	name,
 	image,
 	machine_type,
-	private_ip_address,
-	agent=None,
+	private_ip_address=None,
 	private_network=None,
 	ssh_key=None,
 	cloud_init=None,
@@ -852,7 +853,6 @@ def new_vm_from_image(
 		image=image,
 		machine_type=machine_type,
 		private_ip_address=private_ip_address,
-		agent=agent,
 		private_network=private_network,
 		ssh_key=ssh_key,
 		cloud_init=cloud_init,
