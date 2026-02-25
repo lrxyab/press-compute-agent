@@ -9,7 +9,6 @@ from frappe.model.document import Document
 
 from agent.agent.backup_lib.backup import VMBackup
 from agent.configuration.paths import CONFIG_PATH
-from agent.utils import is_orchestrator
 
 
 class VirtualMachineImage(Document):
@@ -31,20 +30,10 @@ class VirtualMachineImage(Document):
 	pass
 
 	def before_insert(self):
-		if is_orchestrator():
-			from orchestrator.orchestrator_mapper.api import ComputeCall
-
-			call_to_agent = ComputeCall(self.agent)
-			doc_dict = call_to_agent.create_doc(self.doctype, self.as_dict())
-			self.update(doc_dict)
+		pass
 
 	def on_change(self):
-		if is_orchestrator():
-			from orchestrator.orchestrator_mapper.api import ComputeCall
-
-			call_to_agent = ComputeCall(self.agent)
-			doc_dict = call_to_agent.update_doc(self.doctype, self.name, self.as_dict())
-			self.update(doc_dict)
+		pass
 
 	@frappe.whitelist()
 	def take_image(self):

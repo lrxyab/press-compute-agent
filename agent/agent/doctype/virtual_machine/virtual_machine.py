@@ -20,7 +20,6 @@ from frappe.utils.synchronization import filelock
 from agent.configuration.configs import XML_CONFIG
 from agent.configuration.connections import libvirt_connection
 from agent.configuration.paths import CONFIG_PATH
-from agent.utils import is_orchestrator
 
 DOMAIN_STATE_MAP = {
 	0: "Undefined",
@@ -76,40 +75,33 @@ class VirtualMachine(Document):
 			self.uuid = str(uuid4())
 
 	def before_insert(self):
-		if is_orchestrator():
-			from orchestrator.orchestrator_mapper.api import ComputeCall
+		if not self.get_image_path():
+			root_disk = frappe.new_doc("Disk")
+			root_disk.is_primary_disk = True
+			root_disk.size = self.root_disk_size
+			root_disk.virtual_machine_image = self.virtual_machine_image
+			root_disk.insert()
+			self.append("disks", {"disk": root_disk.name, "device": "vda"})
 
-			call_to_agent = ComputeCall(self.agent)
-			doc_dict = call_to_agent.create_doc("Virtual Machine", self.as_dict())
-			self.update(doc_dict)
-		else:
-			if not self.get_image_path():
-				root_disk = frappe.new_doc("Disk")
-				root_disk.is_primary_disk = True
-				root_disk.size = self.root_disk_size
-				root_disk.virtual_machine_image = self.virtual_machine_image
-				root_disk.insert()
-				self.append("disks", {"disk": root_disk.name, "device": "vda"})
+		self.domain = self.apply_config()
+		self.set_state()
+		# assuming that a seed image named {self.uuid}.img is always created because this is
+		# hardcoded in the config in the previous step
+		self.apply_image_config()
+		if self.public_ip_address:
+			mac_address = frappe.db.get_value("IP Address", self.public_ip_address, "mac_address")
+			default_network_interface = frappe.db.get_single_value(
+				"Compute Settings", "default_network_interface"
+			)
 
-			self.domain = self.apply_config()
-			self.set_state()
-			# assuming that a seed image named {self.uuid}.img is always created because this is
-			# hardcoded in the config in the previous step
-			self.apply_image_config()
-			if self.public_ip_address:
-				mac_address = frappe.db.get_value("IP Address", self.public_ip_address, "mac_address")
-				default_network_interface = frappe.db.get_single_value(
-					"Compute Settings", "default_network_interface"
-				)
-
-				self.append(
-					"network_interfaces",
-					{
-						"name1": default_network_interface,
-						"type": "Direct",
-						"mac_address": mac_address,
-					},
-				)
+			self.append(
+				"network_interfaces",
+				{
+					"name1": default_network_interface,
+					"type": "Direct",
+					"mac_address": mac_address,
+				},
+			)
 
 	def validate(self):
 		if self.polled:
@@ -118,52 +110,38 @@ class VirtualMachine(Document):
 		# sunsetting this since there is a forced creation of root disk
 		# self.validate_root_device_exists()
 
-	def on_change(self):  # noqa: C901
+	def on_change(self):
 		if self.polled:
 			return
-		if is_orchestrator():
-			from orchestrator.orchestrator_mapper.api import ComputeCall
+		doc_before_save = self.get_doc_before_save()
 
-			call_to_agent = ComputeCall(self.agent)
+		# check for state change
+		# if doc_before_save.memory != self.memory or doc_before_save.number_of_vcpus != self.number_of_vcpus or doc_before_save.disks != self.disks:
+		if not doc_before_save:
+			return
+		self.apply_config()
+
+		if doc_before_save.state != self.state:
 			try:
-				doc_dict = call_to_agent.update_doc("Virtual Machine", self.name, self.as_dict())
-			except Exception:
-				return
-			try:
-				self.update(doc_dict)
+				self.set_state()
 			except Exception as e:
-				print(doc_dict, e)
-				pass
-		else:
-			doc_before_save = self.get_doc_before_save()
+				frappe.msgprint(
+					_("""There was an error {} while updating the state. Fetching the
+					state of the virtual machine""").format(e)
+				)
 
-			# check for state change
-			# if doc_before_save.memory != self.memory or doc_before_save.number_of_vcpus != self.number_of_vcpus or doc_before_save.disks != self.disks:
-			if not doc_before_save:
-				return
-			self.apply_config()
-
-			if doc_before_save.state != self.state:
-				try:
-					self.set_state()
-				except Exception as e:
-					frappe.msgprint(
-						_("""There was an error {} while updating the state. Fetching the
-						state of the virtual machine""").format(e)
-					)
-
-			# hacky way to declaratively apply disks
-			prev_disks = set([(disk.disk, disk.device) for disk in doc_before_save.disks])
-			new_disks = set([(disk.disk, disk.device) for disk in self.disks])
-			if new_disks != prev_disks:
-				# detach disks that don't exist anymore
-				for disk in prev_disks.difference(new_disks):
-					self.detach_disk(disk[1])
-				# attach newly defined disks
-				for disk in new_disks.difference(prev_disks):
-					disk_doc = frappe.get_doc("Disk", disk[0])
-					path = disk_doc.file_path
-					self.attach_disk(path, disk[1])
+		# hacky way to declaratively apply disks
+		prev_disks = set([(disk.disk, disk.device) for disk in doc_before_save.disks])
+		new_disks = set([(disk.disk, disk.device) for disk in self.disks])
+		if new_disks != prev_disks:
+			# detach disks that don't exist anymore
+			for disk in prev_disks.difference(new_disks):
+				self.detach_disk(disk[1])
+			# attach newly defined disks
+			for disk in new_disks.difference(prev_disks):
+				disk_doc = frappe.get_doc("Disk", disk[0])
+				path = disk_doc.file_path
+				self.attach_disk(path, disk[1])
 
 	def on_trash(self):
 		if self.public_ip_address:
