@@ -56,7 +56,7 @@ class VirtualMachine(Document):
 		state: DF.Literal["Undefined", "Stopped", "Running", "Paused", "Saved"]
 		uuid: DF.Data | None
 		virtual_machine_image: DF.Link
-		virtual_machine_type: DF.Link
+		virtual_machine_type: DF.Data
 	# end: auto-generated types
 
 	def __init__(self, *args, **kwargs):

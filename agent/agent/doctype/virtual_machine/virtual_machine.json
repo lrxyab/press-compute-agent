@@ -99,7 +99,7 @@
   },
   {
    "fieldname": "virtual_machine_type",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Virtual Machine Type",
    "options": "Virtual Machine Type",
    "reqd": 1
