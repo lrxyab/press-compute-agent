@@ -73,7 +73,10 @@ class Disk(Document):
 			frappe.throw(_("Failed to create disk: {}").format(e))
 
 	def after_delete(self):
-		os.remove(self.file_path)
+		try:
+			os.remove(self.file_path)
+		except FileNotFoundError:
+			return
 
 	def set_disk_size(self):
 		subprocess.call(["qemu-img", "resize", "-f", "qcow2", self.get_path(), f"{self.size}G"])
