@@ -737,86 +737,70 @@ def parse_machine_details(xml_string: str):
 	# out["network_interfaces"] =
 	return out
 
+
 # TODO: move to orchestrator
 def _new_vm_from_image(
 	name,
 	image,
 	machine_type,
+	memory,
+	number_of_vcpus,
+	public_ip_address,
+	public_ip_mac_address=None,
 	private_ip_address=None,
-	agent=None,
 	private_network=None,
 	ssh_key=None,
 	cloud_init=None,
 	root_disk_size=None,
 ):
-	# import random
-	# if agent == None:
-	# 	agent = random.choice(frappe.db.get_all("Agent", ["name", "default_network_interface"]))
+	vm = frappe.new_doc("Virtual Machine")
+	vm.name = name
+	vm.ssh_key = ssh_key
+	vm.cloud_init = cloud_init
+	vm.public_ip_address = public_ip_address
+	vm.public_ip_mac_address = public_ip_mac_address
+	vm.virtual_machine_image = image
+	vm.virtual_machine_type = machine_type
+	vm.root_disk_size = root_disk_size
+	vm.machine_type = machine_type
+	vm.memory = memory
+	vm.number_of_vcpus = number_of_vcpus
 
-	# public ip allocation
-	# shmort locking mechanism
-	def ip_address_lock_key(address):
-		return f"{address}-ip-address-lock"
+	# vm.agent = agent.name
 
-	free_ip_addresses = frappe.get_all("IP Address", {"virtual_machine": ("is", "not set")}, pluck="name")
-	unreserved_free_ip_addresses = []
-	for free_ip_address in free_ip_addresses:
-		with filelock(ip_address_lock_key(free_ip_address)):
-			if not frappe.cache.get_value(ip_address_lock_key(free_ip_address)):
-				unreserved_free_ip_addresses.append(free_ip_address)
+	vm.insert()
 
-	if len(unreserved_free_ip_addresses) == 0:
-		frappe.throw("No free public ip address available :(")
+	if private_network:
+		private_network_doc = frappe.get_doc("Private Network", private_network)
+		private_network_doc.append(
+			"virtual_machines",
+			{"virtual_machine": vm.name, "ip_address": private_ip_address},
+		)
+		private_network_doc.save()
 
-	public_ip_address = unreserved_free_ip_addresses[0]
+	vm.load_from_db()
 
-	with filelock(ip_address_lock_key(public_ip_address)):
-		frappe.cache.set_value(ip_address_lock_key(public_ip_address), True, expires_in_sec=50)
+	# vm.load_from_db()
+	vm.save()
 
-		vm = frappe.new_doc("Virtual Machine")
-		vm.name = name
-		vm.ssh_key = ssh_key
-		vm.cloud_init = cloud_init
-		vm.public_ip_address = public_ip_address
-		vm.virtual_machine_image = image
-		vm.virtual_machine_type = machine_type
-		vm.root_disk_size = root_disk_size
-
-		# vm.agent = agent.name
-
-		vm.insert()
-
-		# can be linked now
-		frappe.db.set_value("IP Address", public_ip_address, "virtual_machine", name)
-
-		if private_network:
-			private_network_doc = frappe.get_doc("Private Network", private_network)
-			private_network_doc.append(
-				"virtual_machines",
-				{"virtual_machine": vm.name, "ip_address": private_ip_address},
-			)
-			private_network_doc.save()
-
-		vm.load_from_db()
-
-		# vm.load_from_db()
-		vm.state = "Running"
-		vm.save()
-
-		# this will be the instance_id to track the VM state
-		return vm.uuid
+	# this will be the instance_id to track the VM state
+	return vm.uuid
 
 
 @frappe.whitelist()
 def new_vm_from_image(
-	name,
-	image,
-	machine_type,
-	private_ip_address=None,
-	private_network=None,
-	ssh_key=None,
-	cloud_init=None,
-	root_disk_size=None,
+	name: str,
+	image: str,
+	machine_type: str,
+	memory: int,
+	number_of_vcpus: int,
+	public_ip_address: str,
+	public_ip_mac_address: str | None = None,
+	private_ip_address: str | None = None,
+	private_network: str | None = None,
+	ssh_key: str | None = None,
+	cloud_init: str | None = None,
+	root_disk_size: int | None = None,
 ):
 	# TODO: after profiling, it seems that disk creation takes the most time
 	# safely enqueue it in such a way it doesn't affect functionality
@@ -827,6 +811,10 @@ def new_vm_from_image(
 		name=name,
 		image=image,
 		machine_type=machine_type,
+		memory=memory,
+		number_of_vcpus=number_of_vcpus,
+		public_ip_address=public_ip_address,
+		public_ip_mac_address=public_ip_mac_address,
 		private_ip_address=private_ip_address,
 		private_network=private_network,
 		ssh_key=ssh_key,
