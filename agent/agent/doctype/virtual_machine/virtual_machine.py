@@ -84,8 +84,7 @@ class VirtualMachine(Document):
 			root_disk.insert()
 			self.append("disks", {"disk": root_disk.name, "device": "vda"})
 
-		self.domain = self.apply_config()
-		self.set_state()
+		self.apply_config()
 		# assuming that a seed image named {self.uuid}.img is always created because this is
 		# hardcoded in the config in the previous step
 		self.apply_image_config()
@@ -120,15 +119,6 @@ class VirtualMachine(Document):
 		if not doc_before_save:
 			return
 		self.apply_config()
-
-		if doc_before_save.state != self.state:
-			try:
-				self.set_state()
-			except Exception as e:
-				frappe.msgprint(
-					_("""There was an error {} while updating the state. Fetching the
-					state of the virtual machine""").format(e)
-				)
 
 		# hacky way to declaratively apply disks
 		prev_disks = set([(disk.disk, disk.device) for disk in doc_before_save.disks])
@@ -170,18 +160,6 @@ class VirtualMachine(Document):
 				return
 		frappe.throw(_("Could not find a disk as the device 'vda'"))
 
-	def set_state(self):
-		with filelock(self.reboot_lock_key):
-			match self.state:
-				case "Running":
-					self.start()
-				case "Stopped":
-					frappe.enqueue_doc("Virtual Machine", self.name, "stop")
-				case "Paused":
-					self.pause()
-				case "Undefined":
-					self.undefine()
-
 	@frappe.whitelist()
 	def start(self):
 		if self.domain:
@@ -191,13 +169,12 @@ class VirtualMachine(Document):
 		# 0 is undefined
 		match DOMAIN_STATE_MAP[state]:
 			case "Undefined":
-				self.domain = libvirt_connection.defineXMLFlags(self.xml.toxml())
+				self.apply_config()
 				self.domain.create()
 			case "Stopped":
 				self.domain.create()
 			case "Paused":
 				self.domain.resume()
-		self.state = "Running"
 
 	@frappe.whitelist()
 	def stop(self):
@@ -215,13 +192,11 @@ class VirtualMachine(Document):
 					while True:
 						if not self.domain.isActive():
 							break
-		self.state = "Stopped"
 		self.save()
 
 	@frappe.whitelist()
 	def pause(self):
 		self.domain.suspend()
-		self.state = "Paused"
 
 	@frappe.whitelist()
 	def undefine(self):
@@ -237,8 +212,6 @@ class VirtualMachine(Document):
 				self.domain.destroy()
 
 			self.domain.undefine()
-		self.state = "Undefined"
-		self.save()
 
 	def _shutdown(self, reboot=False):
 		with filelock(self.reboot_lock_key):
@@ -259,7 +232,6 @@ class VirtualMachine(Document):
 				raise ShutdownFailedException from None
 
 			if not reboot:
-				self.state = "Stopped"
 				self.save()
 
 	@frappe.whitelist()
@@ -281,9 +253,8 @@ class VirtualMachine(Document):
 	def apply_config(self):
 		self.xml = get_new_config()
 		self.create_config()
-		if self.state != "Undefined":
-			return libvirt_connection.defineXMLFlags(self.xml.toxml())
-		return None
+		self.domain = libvirt_connection.defineXMLFlags(self.xml.toxml())
+		return self.domain
 
 	# the most important function
 	# takes parameters from the document and converts them to XML
@@ -628,6 +599,16 @@ class VirtualMachine(Document):
 	@property
 	def seed_path(self):
 		return str(Path(CONFIG_PATH, "seeds", f"{self.uuid}.img").absolute())
+
+	@property
+	def state(self):
+		try:
+			dom = libvirt_connection.lookupByName(self.name)
+			state, _ = dom.state()
+			return DOMAIN_STATE_MAP[state]
+
+		except Exception:
+			return "Undefined"
 
 
 def generate_disk_xml(disk: str, dev: str):
