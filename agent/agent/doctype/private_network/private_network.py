@@ -38,14 +38,14 @@ class PrivateNetwork(Document):
 
 	def before_insert(self):
 		network_config = self.get_config()
-		network = libvirt_connection.networkDefineXMLFlags(network_config)
+		network = libvirt_connection().networkDefineXMLFlags(network_config)
 		network.create()
 		network.autostart()
 
 	def on_change(self):
 		from xml.dom.minidom import Document
 
-		self.network = libvirt_connection.networkLookupByName(self.name)
+		self.network = libvirt_connection().networkLookupByName(self.name)
 
 		doc_before_save = self.get_doc_before_save()
 		if not doc_before_save:

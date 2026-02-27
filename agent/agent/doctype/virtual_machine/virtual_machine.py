@@ -66,7 +66,7 @@ class VirtualMachine(Document):
 		if self.name:
 			try:
 				if self.state != "Undefined":
-					self.domain = libvirt_connection.lookupByName(self.name)
+					self.domain = libvirt_connection().lookupByName(self.name)
 			except libvirt.libvirtError as e:
 				if e.get_error_code() == libvirt.VIR_ERR_NO_DOMAIN:
 					pass
@@ -185,7 +185,7 @@ class VirtualMachine(Document):
 
 		match DOMAIN_STATE_MAP[state]:
 			case "Undefined":
-				self.domain = libvirt_connection.defineXMLFlags(self.xml.toxml())
+				self.domain = libvirt_connection().defineXMLFlags(self.xml.toxml())
 			case "Running":
 				with filelock(self.reboot_lock_key):
 					self.domain.shutdown()
@@ -203,7 +203,7 @@ class VirtualMachine(Document):
 		# we might not have the domain but it might exist
 		if not self.domain:
 			try:
-				self.domain = libvirt_connection.lookupByName(self.name)
+				self.domain = libvirt_connection().lookupByName(self.name)
 			except Exception:
 				# if it does not exist no extra effort needed
 				return
@@ -253,7 +253,7 @@ class VirtualMachine(Document):
 	def apply_config(self):
 		self.xml = get_new_config()
 		self.create_config()
-		self.domain = libvirt_connection.defineXMLFlags(self.xml.toxml())
+		self.domain = libvirt_connection().defineXMLFlags(self.xml.toxml())
 		return self.domain
 
 	# the most important function
@@ -603,7 +603,7 @@ class VirtualMachine(Document):
 	@property
 	def state(self):
 		try:
-			dom = libvirt_connection.lookupByName(self.name)
+			dom = libvirt_connection().lookupByName(self.name)
 			state, _ = dom.state()
 			return DOMAIN_STATE_MAP[state]
 

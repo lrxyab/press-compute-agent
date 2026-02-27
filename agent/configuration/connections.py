@@ -1,3 +1,5 @@
 import libvirt
 
-libvirt_connection = libvirt.open("qemu:///system")
+
+def libvirt_connection() -> libvirt.virConnect:
+	return libvirt.open("qemu:///system")
