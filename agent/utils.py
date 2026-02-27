@@ -22,9 +22,11 @@ def get_system_state():
 
 
 # available memory without overprovisioning
+# theoretical limit
 @frappe.whitelist()
 def get_free_memory():
 	import psutil
 
-	memory_used = frappe.get_value("Virtual Machine", {}, [{"SUM": "memory"}])
+	# offset by 8 to leave space
+	memory_used = frappe.get_value("Virtual Machine", {}, [{"SUM": "memory"}]) or 0 + 8
 	return psutil.virtual_memory().total / (1024**3) - memory_used * 1000 / 1024
