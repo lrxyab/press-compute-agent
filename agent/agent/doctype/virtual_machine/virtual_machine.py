@@ -49,7 +49,8 @@ class VirtualMachine(Document):
 		memory: DF.Int
 		network_interfaces: DF.Table[NetworkInterface]
 		number_of_vcpus: DF.Int
-		public_ip_address: DF.Link | None
+		public_ip_address: DF.Data | None
+		public_ip_mac_address: DF.Data | None
 		root_disk_size: DF.Int
 		ssh_key: DF.Code | None
 		state: DF.Literal["Undefined", "Stopped", "Running", "Paused", "Saved"]
@@ -89,7 +90,6 @@ class VirtualMachine(Document):
 		# hardcoded in the config in the previous step
 		self.apply_image_config()
 		if self.public_ip_address:
-			mac_address = frappe.db.get_value("IP Address", self.public_ip_address, "mac_address")
 			default_network_interface = frappe.db.get_single_value(
 				"Compute Settings", "default_network_interface"
 			)
@@ -99,7 +99,7 @@ class VirtualMachine(Document):
 				{
 					"name1": default_network_interface,
 					"type": "Direct",
-					"mac_address": mac_address,
+					"mac_address": self.public_ip_mac_address,
 				},
 			)
 
@@ -144,9 +144,6 @@ class VirtualMachine(Document):
 				self.attach_disk(path, disk[1])
 
 	def on_trash(self):
-		if self.public_ip_address:
-			frappe.db.set_value("IP Address", self.public_ip_address, "virtual_machine", None)
-
 		# bad naming.
 		private_network_children = frappe.get_all(
 			"Private Network Machines", {"virtual_machine": self.name}, pluck="name"
@@ -431,9 +428,10 @@ class VirtualMachine(Document):
 					interface = self.xml.createElement("interface")
 					interface.setAttribute("type", "direct")
 
-					mac = self.xml.createElement("mac")
-					mac.setAttribute("address", network_interface.mac_address)
-					interface.appendChild(mac)
+					if network_interface.mac_address:
+						mac = self.xml.createElement("mac")
+						mac.setAttribute("address", network_interface.mac_address)
+						interface.appendChild(mac)
 
 					source = self.xml.createElement("source")
 					source.setAttribute("dev", network_interface.name1)
@@ -738,7 +736,6 @@ def parse_machine_details(xml_string: str):
 	out["disks"] = disks
 	# out["network_interfaces"] =
 	return out
-
 
 # TODO: move to orchestrator
 def _new_vm_from_image(

@@ -15,6 +15,7 @@
   "uuid",
   "virtual_machine_image",
   "public_ip_address",
+  "public_ip_mac_address",
   "section_break_frdk",
   "disks",
   "network_interfaces",
@@ -110,7 +111,7 @@
   },
   {
    "fieldname": "public_ip_address",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Public IP Address",
    "options": "IP Address",
    "set_only_once": 1
@@ -122,6 +123,11 @@
    "in_list_view": 1,
    "label": "State",
    "options": "Undefined\nStopped\nRunning\nPaused\nSaved"
+  },
+  {
+   "fieldname": "public_ip_mac_address",
+   "fieldtype": "Data",
+   "label": "Public IP MAC Address"
   }
  ],
  "grid_page_length": 50,
