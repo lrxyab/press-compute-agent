@@ -1,7 +1,7 @@
 # Copyright (c) 2025, ayush@frappe.io and contributors
 # For license information, please see license.txt
 
-# import frappe
+import frappe
 from frappe.model.document import Document
 
 
@@ -23,3 +23,12 @@ class ComputeSettings(Document):
 	# end: auto-generated types
 
 	pass
+
+
+@frappe.whitelist()
+def update_orchestrator_credentials(api_key: str, api_secret: str):
+	frappe.only_for("Administrator")
+	compute_settings_doc = frappe.get_single("Compute Settings")
+	compute_settings_doc.orchestrator_api_key = api_key
+	compute_settings_doc.orchestrator_api_secret = api_secret
+	compute_settings_doc.save()
