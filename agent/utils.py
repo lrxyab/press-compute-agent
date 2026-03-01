@@ -1,4 +1,5 @@
 import frappe
+from frappe.frappeclient import FrappeClient
 
 
 # returns all the information on the system about
@@ -30,3 +31,12 @@ def get_free_memory():
 	# offset by 8 to leave space
 	memory_used = frappe.get_value("Virtual Machine", {}, [{"SUM": "memory"}]) or 0 + 8
 	return psutil.virtual_memory().total / (1024**3) - memory_used * 1000 / 1024
+
+
+def get_connection_to_orchestrator():
+	compute_settings = frappe.get_single("Compute Settings")
+	api_key = compute_settings.orchestrator_api_key
+	api_secret = compute_settings.get_password("orchestrator_api_secret")
+	base_url = compute_settings.orchestrator_base_url
+
+	return FrappeClient(url=base_url, api_key=api_key, api_secret=api_secret)
