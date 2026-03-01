@@ -8,6 +8,7 @@
   "default_network_interface",
   "private_ip",
   "private_network_interface",
+  "orchestrator_base_url",
   "orchestrator_api_key",
   "orchestrator_api_secret"
  ],
@@ -40,13 +41,18 @@
    "fieldname": "orchestrator_api_secret",
    "fieldtype": "Password",
    "label": "Orchestrator API Secret"
+  },
+  {
+   "fieldname": "orchestrator_base_url",
+   "fieldtype": "Data",
+   "label": "Orchestrator Base URL"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-02 02:28:00.332205",
+ "modified": "2026-03-02 02:30:13.208896",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Compute Settings",
