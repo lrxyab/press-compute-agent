@@ -15,7 +15,6 @@ class ComputeSettings(Document):
 		from frappe.types import DF
 
 		default_network_interface: DF.Data | None
-		is_orchestrator: DF.Check
 		orchestrator_api_key: DF.Data | None
 		orchestrator_api_secret: DF.Password | None
 		private_ip: DF.Data | None

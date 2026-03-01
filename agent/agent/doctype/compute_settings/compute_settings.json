@@ -5,7 +5,6 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "is_orchestrator",
   "default_network_interface",
   "private_ip",
   "private_network_interface",
@@ -13,13 +12,6 @@
   "orchestrator_api_secret"
  ],
  "fields": [
-  {
-   "default": "0",
-   "description": "Will be considered to be an agent otherwise\n",
-   "fieldname": "is_orchestrator",
-   "fieldtype": "Check",
-   "label": "Is Orchestrator"
-  },
   {
    "depends_on": "eval:!doc.is_orchestrator",
    "description": "The default network interface of the host machine",
@@ -54,7 +46,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-02 00:39:27.021808",
+ "modified": "2026-03-02 02:28:00.332205",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Compute Settings",
