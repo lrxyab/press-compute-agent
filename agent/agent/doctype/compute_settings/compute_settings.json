@@ -8,7 +8,9 @@
   "is_orchestrator",
   "default_network_interface",
   "private_ip",
-  "private_network_interface"
+  "private_network_interface",
+  "orchestrator_api_key",
+  "orchestrator_api_secret"
  ],
  "fields": [
   {
@@ -36,13 +38,23 @@
    "fieldname": "private_network_interface",
    "fieldtype": "Data",
    "label": "Private Network Interface"
+  },
+  {
+   "fieldname": "orchestrator_api_key",
+   "fieldtype": "Data",
+   "label": "Orchestrator API Key"
+  },
+  {
+   "fieldname": "orchestrator_api_secret",
+   "fieldtype": "Password",
+   "label": "Orchestrator API Secret"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-01-23 10:07:19.635688",
+ "modified": "2026-03-02 00:39:27.021808",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Compute Settings",

@@ -16,8 +16,10 @@ class ComputeSettings(Document):
 
 		default_network_interface: DF.Data | None
 		is_orchestrator: DF.Check
-		private_ip: DF.Data
-		private_network_interface: DF.Data
+		orchestrator_api_key: DF.Data | None
+		orchestrator_api_secret: DF.Password | None
+		private_ip: DF.Data | None
+		private_network_interface: DF.Data | None
 	# end: auto-generated types
 
 	pass
