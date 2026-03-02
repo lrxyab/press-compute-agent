@@ -9,6 +9,7 @@ from frappe.model.document import Document
 
 from agent.agent.backup_lib.backup import VMBackup
 from agent.configuration.paths import CONFIG_PATH
+from agent.utils import get_connection_to_orchestrator
 
 
 class VirtualMachineImage(Document):
@@ -70,3 +71,11 @@ def create_image(instance_id):
 
 	frappe.enqueue_doc("Virtual Machine Image", virtual_machine_image_doc.name, "_take_image")
 	return virtual_machine_image_doc.name
+
+
+def get_vmi_download_token(name: str):
+	connection = get_connection_to_orchestrator()
+	return connection.get_api(
+		"orchestrator.orchestrator.doctype.virtual_machine_image.virtual_machine_image.generate_vmi_token",
+		{"name": name},
+	)
