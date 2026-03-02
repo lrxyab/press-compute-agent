@@ -763,6 +763,7 @@ def _new_vm_from_image(
 
 	# vm.load_from_db()
 	vm.save()
+	vm.start()
 
 	# this will be the instance_id to track the VM state
 	return vm.uuid
