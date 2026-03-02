@@ -6,10 +6,11 @@ from uuid import uuid4
 
 import frappe
 from frappe.model.document import Document
+from werkzeug.utils import send_file
 
 from agent.agent.backup_lib.backup import VMBackup
 from agent.configuration.paths import CONFIG_PATH
-from agent.utils import get_connection_to_orchestrator
+from agent.utils import get_connection_to_orchestrator, verify_jwt
 
 
 class VirtualMachineImage(Document):
@@ -73,9 +74,28 @@ def create_image(instance_id):
 	return virtual_machine_image_doc.name
 
 
+# used by the agent downloading the vmi
 def get_vmi_download_token(name: str):
 	connection = get_connection_to_orchestrator()
 	return connection.get_api(
 		"orchestrator.orchestrator.doctype.virtual_machine_image.virtual_machine_image.generate_vmi_token",
 		{"name": name},
+	)
+
+
+# agent with the vmi will serve it
+@frappe.whitelist(methods=["GET"], allow_guest=True)
+def download_vmi(token: str):
+	decoded_token = verify_jwt(token=token, method="get_vmi")
+	name = decoded_token["vmi"]
+	if not frappe.db.exists("Virtual Machine Image", name):
+		frappe.response.http_status_code = 404
+		return "No such virtual machine image"
+
+	file_path = frappe.db.get_value("Virtual Machine Image", name, "file_path")
+	if not file_path:
+		frappe.response.http_status_code = 404
+		return "No filepath for the virtual machine image"
+	return send_file(
+		file_path, environ=frappe.request.environ, conditional=True, download_name=f"{name}.qcow2"
 	)
