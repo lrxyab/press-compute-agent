@@ -1,5 +1,6 @@
 import frappe
 from frappe.frappeclient import FrappeClient
+from frappe.utils.caching import redis_cache
 
 
 # returns all the information on the system about
@@ -40,3 +41,9 @@ def get_connection_to_orchestrator():
 	base_url = compute_settings.orchestrator_base_url
 
 	return FrappeClient(url=base_url, api_key=api_key, api_secret=api_secret)
+
+
+@redis_cache(ttl=60)
+def get_orchestrator_public_key() -> str:
+	conn = get_connection_to_orchestrator()
+	return conn.get_api("orchestrator.utils.get_public_key")
