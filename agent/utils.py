@@ -1,4 +1,5 @@
 import frappe
+import jwt
 from frappe.frappeclient import FrappeClient
 from frappe.utils.caching import redis_cache
 
@@ -47,3 +48,11 @@ def get_connection_to_orchestrator():
 def get_orchestrator_public_key() -> str:
 	conn = get_connection_to_orchestrator()
 	return conn.get_api("orchestrator.utils.get_public_key")
+
+
+def verify_jwt(token: str, method: str):
+	pub_key = get_orchestrator_public_key()
+	decoded_token = jwt.decode(token, key=pub_key, algorithms=["EdDSA"])
+	if decoded_token["method"] != method:
+		raise frappe.throw(f"The method in the token, '{decoded_token['method']}', seems to be incorrect")
+	return decoded_token
