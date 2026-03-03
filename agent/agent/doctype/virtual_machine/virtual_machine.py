@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlencode, urljoin
 from uuid import uuid4
 from xml.dom import minidom
 
@@ -17,9 +18,11 @@ from frappe.model.document import Document
 from frappe.utils.caching import redis_cache
 from frappe.utils.synchronization import filelock
 
+from agent.agent.doctype.virtual_machine_image.virtual_machine_image import get_vmi_download_token
 from agent.configuration.configs import XML_CONFIG
 from agent.configuration.connections import libvirt_connection
 from agent.configuration.paths import CONFIG_PATH
+from agent.utils import get_connection_to_orchestrator
 
 DOMAIN_STATE_MAP = {
 	0: "Undefined",
@@ -740,6 +743,7 @@ def _new_vm_from_image(
 	root_disk_size=None,
 	uuid=None,
 ):
+	provision_vmi_from_orchestrator(image)
 	vm = frappe.new_doc("Virtual Machine")
 	vm.name = name
 	vm.uuid = uuid
@@ -847,6 +851,67 @@ def terminate(name):
 
 	vm_doc = frappe.get_doc("Virtual Machine", name)
 	vm_doc.delete()
+
+
+def provision_vmi_from_orchestrator(image: str):
+	# 1 minute validity
+	download_token = get_vmi_download_token(image)
+
+	if frappe.db.exists("Virtual Machine Image", image):
+		return
+	import hashlib
+
+	conn = get_connection_to_orchestrator()
+	vmi_info = conn.get_api(
+		"orchestrator.orchestrator.doctype.virtual_machine_image.virtual_machine_image.get_agents_for_vmi",
+		{"name": image},
+	)
+
+	base_urls = vmi_info["base_urls"]
+	destination_directory = Path(CONFIG_PATH, "images")
+	filename = f"{image}.qcow2"
+
+	def get_download_url(base_url):
+		return (
+			urljoin(
+				base_url,
+				"api/method/agent.agent.doctype.virtual_machine_image.virtual_machine_image.download_vmi",
+			)
+			+ "?"
+			+ urlencode({"token": download_token})
+		)
+
+	subprocess.check_call(
+		[
+			"aria2c",
+			*[get_download_url(base_url) for base_url in base_urls],
+			"-d",
+			str(destination_directory.absolute()),
+			"-o",
+			filename,
+		],
+		shell=False,
+	)
+
+	file_path = destination_directory.joinpath(filename)
+
+	with open(file_path, "rb") as file:
+		digest = hashlib.file_digest(file, "sha256")
+
+	if vmi_info["sha256sum"] != digest.hexdigest():
+		import os
+
+		os.remove(file_path)
+		frappe.throw("Error, checksums don't match")
+
+	vmi_doc = frappe.new_doc("Virtual Machine Image")
+	vmi_doc.name = image
+	vmi_doc.file_path = str(file_path)
+	vmi_doc.status = "Available"
+	vmi_doc.insert()
+
+	# I wanna keep the vmi even if the vm creation fails
+	frappe.db.commit()  # nosemgrep
 
 
 class RebootLockedException(Exception):
