@@ -73,7 +73,10 @@ class VirtualMachine(Document):
 				else:
 					frappe.throw(_("Faced an error {} {}").format(e, self.name))
 		if not self.uuid:
-			self.uuid = str(uuid4())
+			if self.domain:
+				self.uuid = self.domain.UUID()
+			else:
+				self.uuid = str(uuid4())
 
 	def before_insert(self):
 		if not self.get_image_path():
