@@ -738,9 +738,11 @@ def _new_vm_from_image(
 	ssh_key=None,
 	cloud_init=None,
 	root_disk_size=None,
+	uuid=None,
 ):
 	vm = frappe.new_doc("Virtual Machine")
 	vm.name = name
+	vm.uuid = uuid
 	vm.ssh_key = ssh_key
 	vm.cloud_init = cloud_init
 	vm.public_ip_address = public_ip_address
@@ -794,7 +796,10 @@ def new_vm_from_image(
 	# nevertheless, after moving away from virt-customize, the speed boosts
 	# are good enough to be able to afford the creation of the VM to be synchronous
 	# still keeping this structure if in the future there is a need to enqueue creation
-	return _new_vm_from_image(
+
+	instance_id = str(uuid4())
+	frappe.enqueue(
+		"agent.agent.doctype.virtual_machine.virtual_machine._new_vm_from_image",
 		name=name,
 		image=image,
 		machine_type=machine_type,
@@ -807,7 +812,10 @@ def new_vm_from_image(
 		ssh_key=ssh_key,
 		cloud_init=cloud_init,
 		root_disk_size=root_disk_size,
+		uuid=instance_id,
+		enqueue_after_commit=True,
 	)
+	return instance_id
 
 
 @frappe.whitelist(methods=["GET"])
