@@ -87,7 +87,7 @@ class VirtualMachine(Document):
 			root_disk.insert()
 			self.append("disks", {"disk": root_disk.name, "device": "vda"})
 
-		self.apply_config()
+		self.apply_config(define=False)
 		# assuming that a seed image named {self.uuid}.img is always created because this is
 		# hardcoded in the config in the previous step
 		self.apply_image_config()
@@ -172,9 +172,10 @@ class VirtualMachine(Document):
 		# 0 is undefined
 		match DOMAIN_STATE_MAP[state]:
 			case "Undefined":
-				self.apply_config()
+				self.apply_config(define=True)
 				self.domain.create()
 			case "Stopped":
+				self.apply_config(define=True)
 				self.domain.create()
 			case "Paused":
 				self.domain.resume()
@@ -253,10 +254,11 @@ class VirtualMachine(Document):
 	def reboot(self):
 		frappe.enqueue_doc("Virtual Machine", self.name, "_reboot")
 
-	def apply_config(self):
+	def apply_config(self, define=False):
 		self.xml = get_new_config()
 		self.create_config()
-		self.domain = libvirt_connection().defineXMLFlags(self.xml.toxml())
+		if define:
+			self.domain = libvirt_connection().defineXMLFlags(self.xml.toxml())
 		return self.domain
 
 	# the most important function
