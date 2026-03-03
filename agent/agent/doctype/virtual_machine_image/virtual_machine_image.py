@@ -25,7 +25,7 @@ class VirtualMachineImage(Document):
 		file_path: DF.Data | None
 		is_from_vm: DF.Check
 		size: DF.Data | None
-		status: DF.Literal["Draft", "Pending", "Ongoing", "Completed"]
+		status: DF.Literal["Draft", "Pending", "Ongoing", "Available"]
 		virtual_machine: DF.Link | None
 	# end: auto-generated types
 
@@ -48,7 +48,7 @@ class VirtualMachineImage(Document):
 		backup.backup_disk("vda", str(image_path.absolute()))
 		backup.begin()
 		self.file_path = str(image_path.absolute())
-		self.status = "Completed"
+		self.status = "Available"
 
 		for disk in virtual_machine.disks:
 			if disk.device == "vda":
