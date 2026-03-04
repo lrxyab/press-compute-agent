@@ -702,7 +702,7 @@ def update_details(vm_details=None):  # noqa: C901
 @redis_cache(ttl=10)
 def get_all_disks():
 	disk_doc = frappe.qb.DocType("Disk")
-	query = disk_doc.select("name", "file_path")
+	query = frappe.qb.from_(disk_doc).select("name", "file_path")
 	return {i.file_path: i.name for i in query.run(as_dict=True)}
 
 
