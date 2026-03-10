@@ -53,7 +53,6 @@ class VirtualMachine(Document):
 		network_interfaces: DF.Table[NetworkInterface]
 		number_of_vcpus: DF.Int
 		public_ip_address: DF.Data | None
-		public_ip_mac_address: DF.Data | None
 		root_disk_size: DF.Int
 		ssh_key: DF.Code | None
 		state: DF.Literal["Undefined", "Stopped", "Running", "Paused", "Saved"]
@@ -735,7 +734,6 @@ def _new_vm_from_image(
 	memory,
 	number_of_vcpus,
 	public_ip_address,
-	public_ip_mac_address=None,
 	private_ip_address=None,
 	private_network=None,
 	ssh_key=None,
@@ -750,7 +748,6 @@ def _new_vm_from_image(
 	vm.ssh_key = ssh_key
 	vm.cloud_init = cloud_init
 	vm.public_ip_address = public_ip_address
-	vm.public_ip_mac_address = public_ip_mac_address
 	vm.virtual_machine_image = image
 	vm.virtual_machine_type = machine_type
 	vm.root_disk_size = root_disk_size
@@ -788,7 +785,6 @@ def new_vm_from_image(
 	memory: int,
 	number_of_vcpus: int,
 	public_ip_address: str,
-	public_ip_mac_address: str | None = None,
 	private_ip_address: str | None = None,
 	private_network: str | None = None,
 	ssh_key: str | None = None,
@@ -810,7 +806,6 @@ def new_vm_from_image(
 		memory=memory,
 		number_of_vcpus=number_of_vcpus,
 		public_ip_address=public_ip_address,
-		public_ip_mac_address=public_ip_mac_address,
 		private_ip_address=private_ip_address,
 		private_network=private_network,
 		ssh_key=ssh_key,

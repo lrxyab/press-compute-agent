@@ -15,7 +15,6 @@
   "uuid",
   "virtual_machine_image",
   "public_ip_address",
-  "public_ip_mac_address",
   "section_break_frdk",
   "disks",
   "network_interfaces",
@@ -124,17 +123,12 @@
    "is_virtual": 1,
    "label": "State",
    "options": "Undefined\nStopped\nRunning\nPaused\nSaved"
-  },
-  {
-   "fieldname": "public_ip_mac_address",
-   "fieldtype": "Data",
-   "label": "Public IP MAC Address"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-03 13:09:11.601086",
+ "modified": "2026-03-10 17:10:44.627503",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine",
