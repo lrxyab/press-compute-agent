@@ -10,7 +10,8 @@
   "private_network_interface",
   "orchestrator_base_url",
   "orchestrator_api_key",
-  "orchestrator_api_secret"
+  "orchestrator_api_secret",
+  "ovs_bridge"
  ],
  "fields": [
   {
@@ -46,13 +47,19 @@
    "fieldname": "orchestrator_base_url",
    "fieldtype": "Data",
    "label": "Orchestrator Base URL"
+  },
+  {
+   "description": "This bridge should be the master of your public IP interface. Used for public IP management of the VMs.",
+   "fieldname": "ovs_bridge",
+   "fieldtype": "Data",
+   "label": "OVS Bridge"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-02 02:30:13.208896",
+ "modified": "2026-03-11 12:41:56.085828",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Compute Settings",

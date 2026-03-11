@@ -18,6 +18,7 @@ class ComputeSettings(Document):
 		orchestrator_api_key: DF.Data | None
 		orchestrator_api_secret: DF.Password | None
 		orchestrator_base_url: DF.Data | None
+		ovs_bridge: DF.Data | None
 		private_ip: DF.Data | None
 		private_network_interface: DF.Data | None
 	# end: auto-generated types
