@@ -10,6 +10,7 @@ from frappe.model.document import Document
 from pyroute2 import IPRoute
 
 from agent.configuration.connections import libvirt_connection
+from agent.utils import mac_address_generator
 
 
 class PrivateNetwork(Document):
@@ -70,7 +71,7 @@ class PrivateNetwork(Document):
 			# and not from doc_before_save. But, still
 			# TODO: Refactor and de-duplicate
 			if not virtual_machine.mac_address:
-				virtual_machine.mac_address = mac_address_generator()
+				virtual_machine.mac_address = mac_address_generator(virtual_machine.ip_address)
 				virtual_machine.save()
 				virtual_machine.load_from_db()
 
@@ -201,19 +202,6 @@ class PrivateNetwork(Document):
 
 		# attach vxlan to bridge
 		ip.link("set", index=vxlan_if_index, master=bridge_if_idx)
-
-
-def mac_address_generator():
-	import random
-
-	nums = "0123456789abcdef"
-	mac = list("52:54:00")
-	for i in range(9, 18):
-		if i % 3 == 0:
-			mac.append(":")
-		else:
-			mac.append(random.choice(nums))
-	return "".join(mac)
 
 
 def create_dns_masq_config():

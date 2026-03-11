@@ -56,3 +56,14 @@ def verify_jwt(token: str, method: str):
 	if decoded_token["method"] != method:
 		raise frappe.throw(f"The method in the token, '{decoded_token['method']}', seems to be incorrect")
 	return decoded_token
+
+
+def mac_address_generator(ip_address: str):
+	# Series of events:
+	# 1. first 24 bits are set as 52:54 (kvm conventionally uses 52:54:00, but nothing stops us)
+	# 2. remaining 32 bits can be used to perfectly fit the IP Address
+	import ipaddress
+
+	ip_address_suffix = bytearray(ipaddress.ip_address(ip_address).packed)
+	mac_address_byte_array = bytearray([82, 84]) + ip_address_suffix
+	return ":".join(f"{b:02x}" for b in mac_address_byte_array)
