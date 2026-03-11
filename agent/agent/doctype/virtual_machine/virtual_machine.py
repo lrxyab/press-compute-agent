@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from socket import AF_INET
 from typing import Literal
 from urllib.parse import urlencode, urljoin
 from uuid import uuid4
@@ -13,16 +14,18 @@ from xml.dom import minidom
 
 import frappe
 import libvirt
+import pyroute2
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils.caching import redis_cache
 from frappe.utils.synchronization import filelock
+from pyroute2.netlink.rtnl import ndmsg
 
 from agent.agent.doctype.virtual_machine_image.virtual_machine_image import get_vmi_download_token
 from agent.configuration.configs import XML_CONFIG
 from agent.configuration.connections import libvirt_connection
 from agent.configuration.paths import CONFIG_PATH
-from agent.utils import get_connection_to_orchestrator
+from agent.utils import get_connection_to_orchestrator, mac_address_generator
 
 DOMAIN_STATE_MAP = {
 	0: "Undefined",
@@ -93,19 +96,6 @@ class VirtualMachine(Document):
 		# assuming that a seed image named {self.uuid}.img is always created because this is
 		# hardcoded in the config in the previous step
 		self.apply_image_config()
-		if self.public_ip_address:
-			default_network_interface = frappe.db.get_single_value(
-				"Compute Settings", "default_network_interface"
-			)
-
-			self.append(
-				"network_interfaces",
-				{
-					"name1": default_network_interface,
-					"type": "Direct",
-					"mac_address": self.public_ip_mac_address,
-				},
-			)
 
 	def validate(self):
 		if self.polled:
@@ -181,6 +171,7 @@ class VirtualMachine(Document):
 				self.domain.create()
 			case "Paused":
 				self.domain.resume()
+		self.setup_public_ip_address()
 
 	@frappe.whitelist()
 	def stop(self):
@@ -218,6 +209,7 @@ class VirtualMachine(Document):
 				self.domain.destroy()
 
 			self.domain.undefine()
+		self.domain = None
 
 	def _shutdown(self, reboot=False):
 		with filelock(self.reboot_lock_key):
@@ -288,7 +280,7 @@ class VirtualMachine(Document):
 		# image_path = self.get_image_path()
 		# shutil.copy(os.path.join(CONFIG_PATH, "images", "base.qcow2"), image_path)
 		self.create_device_config()
-		self.create_network_interface_config()
+		self.create_network_interfaces_config()
 
 	def create_device_config(self):
 		devices = self.xml.getElementsByTagName("devices")[0]
@@ -370,9 +362,63 @@ class VirtualMachine(Document):
 		return disk_elem
 
 	def create_network_interfaces_config(self):
-		pass
+		if self.public_ip_address:
+			bridge = frappe.db.get_single_value("Compute Settings", "ovs_bridge")
+			if not bridge:
+				frappe.throw("Bridge not set in Compute Settings")
 
-	def create_network_interface_config(self, type, name, mac_address=None):
+			self.append_network_interface_to_config("Bridge", bridge, mac_address=self.public_mac_address)
+
+	def setup_public_ip_address(self):
+		if not self.public_ip_address:
+			return
+		interface = self.get_network_interface_by_mac_address(self.public_mac_address)
+		if not interface:
+			# This should ideally never get thrown
+			frappe.throw("Network interface not found for public_ip_address")
+		with pyroute2.IPRoute() as ipr:
+			iface_ids = ipr.link_lookup(ifname=interface)
+			if not iface_ids:
+				# This too should ideally never happen.
+				frappe.throw("The interface is defined in the VM's XML but not on the device.")
+
+			iface_id = iface_ids[0]
+			ipr.link("set", index=iface_id, state="up")
+
+			# 253 == "scope link"
+			ipr.route("replace", dst=self.public_ip_address, oif=iface_id, scope=253)
+
+			# Static ARP entry
+			ipr.neigh(
+				"replace",
+				dst=self.public_ip_address,
+				lladdr=self.public_mac_address,
+				ifindex=iface_id,
+				state=ndmsg.states["permanent"],
+				family=AF_INET,
+			)
+
+	def get_network_interface_by_mac_address(self, mac_address: str):
+		# will work only when the VM is running.
+		# should be called in self.start() and equivalent after the domain
+		# has been created or started.
+		xml = minidom.parseString(self.domain.XMLDesc())
+		interfaces = xml.getElementsByTagName("interface")
+		for interface in interfaces:
+			mac_tags = interface.getElementsByTagName("mac")
+			if len(mac_tags):
+				mac_tag = mac_tags[0]
+				if mac_tag.getAttribute("address").lower() == mac_address.lower():
+					targets = interface.getElementsByTagName("target")
+					if not len(targets):
+						frappe.throw("Network interface name not found for public IP")
+
+					return targets[0].getAttribute("dev")
+		return None
+
+	def append_network_interface_to_config(
+		self, type: Literal["Network", "Bridge", "Direct"], name: str, mac_address: str | None = None
+	):
 		devices = self.xml.getElementsByTagName("devices")[0]
 		interface = self.xml.createElement("interface")
 		match type:
@@ -403,11 +449,6 @@ class VirtualMachine(Document):
 			case "Direct":
 				interface.setAttribute("type", "direct")
 
-				if mac_address:
-					mac = self.xml.createElement("mac")
-					mac.setAttribute("address", mac_address)
-					interface.appendChild(mac)
-
 				source = self.xml.createElement("source")
 				source.setAttribute("dev", name)
 				source.setAttribute("mode", "bridge")
@@ -417,6 +458,10 @@ class VirtualMachine(Document):
 				model.setAttribute("type", "e1000")
 				interface.appendChild(model)
 
+		if mac_address:
+			mac = self.xml.createElement("mac")
+			mac.setAttribute("address", mac_address)
+			interface.appendChild(mac)
 		devices.appendChild(interface)
 
 	def attach_disk(self, disk: str, dev: str):
