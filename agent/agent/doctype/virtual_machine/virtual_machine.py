@@ -369,79 +369,55 @@ class VirtualMachine(Document):
 
 		return disk_elem
 
-	def create_network_interface_config(self):
-		# TODO: add condition for all types. currently only using bridges
+	def create_network_interfaces_config(self):
+		pass
+
+	def create_network_interface_config(self, type, name, mac_address=None):
 		devices = self.xml.getElementsByTagName("devices")[0]
-		for network_interface in self.network_interfaces:
-			match network_interface.type:
-				case "Network":
-					interface = self.xml.createElement("interface")
-					interface.setAttribute("type", "network")
+		interface = self.xml.createElement("interface")
+		match type:
+			case "Network":
+				interface.setAttribute("type", "network")
 
-					source = self.xml.createElement("source")
-					source.setAttribute("network", network_interface.name1)
-					interface.appendChild(source)
+				source = self.xml.createElement("source")
+				source.setAttribute("network", name)
+				interface.appendChild(source)
 
-					model = self.xml.createElement("model")
-					model.setAttribute("type", "virtio")
-					interface.appendChild(model)
-					devices.appendChild(interface)
-				case "Bridge":
-					interface = self.xml.createElement("interface")
-					interface.setAttribute("type", "bridge")
+				model = self.xml.createElement("model")
+				model.setAttribute("type", "virtio")
+				interface.appendChild(model)
+			case "Bridge":
+				interface.setAttribute("type", "bridge")
 
-					source = self.xml.createElement("source")
-					source.setAttribute("bridge", network_interface.name1)
-					interface.appendChild(source)
+				source = self.xml.createElement("source")
+				source.setAttribute("bridge", name)
+				interface.appendChild(source)
 
-					vport = self.xml.createElement("virtualport")
-					vport.setAttribute("type", "openvswitch")
-					interface.appendChild(vport)
+				vport = self.xml.createElement("virtualport")
+				vport.setAttribute("type", "openvswitch")
+				interface.appendChild(vport)
 
-					model = self.xml.createElement("model")
-					model.setAttribute("type", "virtio")
-					interface.appendChild(model)
-					devices.appendChild(interface)
-				case "Direct":
-					interface = self.xml.createElement("interface")
-					interface.setAttribute("type", "direct")
+				model = self.xml.createElement("model")
+				model.setAttribute("type", "virtio")
+				interface.appendChild(model)
+			case "Direct":
+				interface.setAttribute("type", "direct")
 
-					if network_interface.mac_address:
-						mac = self.xml.createElement("mac")
-						mac.setAttribute("address", network_interface.mac_address)
-						interface.appendChild(mac)
+				if mac_address:
+					mac = self.xml.createElement("mac")
+					mac.setAttribute("address", mac_address)
+					interface.appendChild(mac)
 
-					source = self.xml.createElement("source")
-					source.setAttribute("dev", network_interface.name1)
-					source.setAttribute("mode", "bridge")
-					interface.appendChild(source)
+				source = self.xml.createElement("source")
+				source.setAttribute("dev", name)
+				source.setAttribute("mode", "bridge")
+				interface.appendChild(source)
 
-					model = self.xml.createElement("model")
-					model.setAttribute("type", "e1000")
-					interface.appendChild(model)
+				model = self.xml.createElement("model")
+				model.setAttribute("type", "e1000")
+				interface.appendChild(model)
 
-					devices.appendChild(interface)
-
-		private_networks = frappe.get_all(
-			"Private Network Machines", filters={"virtual_machine": self.name}, fields=["*"]
-		)
-		print(private_networks)
-		for private_network in private_networks:
-			interface = self.xml.createElement("interface")
-			interface.setAttribute("type", "network")
-
-			source = self.xml.createElement("source")
-			source.setAttribute("network", private_network.parent)
-			interface.appendChild(source)
-
-			mac = self.xml.createElement("mac")
-			mac.setAttribute("address", private_network.mac_address)
-			interface.appendChild(mac)
-
-			model = self.xml.createElement("model")
-			model.setAttribute("type", "virtio")
-			interface.appendChild(model)
-			devices.appendChild(interface)
+		devices.appendChild(interface)
 
 	def attach_disk(self, disk: str, dev: str):
 		from xml.dom import minidom
