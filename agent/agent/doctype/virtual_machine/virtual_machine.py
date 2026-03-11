@@ -593,6 +593,12 @@ class VirtualMachine(Document):
 		except Exception:
 			return "Undefined"
 
+	@property
+	def public_mac_address(self):
+		if not self.public_ip_address:
+			return None
+		return mac_address_generator(self.public_ip_address)
+
 
 def generate_disk_xml(disk: str, dev: str):
 	# never gonna hardcode xml!
