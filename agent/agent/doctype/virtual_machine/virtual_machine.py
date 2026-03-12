@@ -583,9 +583,12 @@ class VirtualMachine(Document):
 			is_path=True,
 		)
 
+		# In the default configuration, at least what we use, the public_ip_address on the bridge
+		# will act as the gateway
+		gateway = frappe.db.get_single_value("Compute Settings", "public_ip_address")
 		network_config = frappe.render_template(
 			"agent/agent/doctype/virtual_machine/network-config.jinja2",
-			context={"ip_address": self.public_ip_address},
+			context={"ip_address": self.public_ip_address, "gateway": gateway},
 			is_path=True,
 		)
 

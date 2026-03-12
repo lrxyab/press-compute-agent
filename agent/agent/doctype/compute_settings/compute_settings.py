@@ -21,6 +21,7 @@ class ComputeSettings(Document):
 		ovs_bridge: DF.Data | None
 		private_ip: DF.Data | None
 		private_network_interface: DF.Data | None
+		public_ip_address: DF.Data | None
 	# end: auto-generated types
 
 	pass

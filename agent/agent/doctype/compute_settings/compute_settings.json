@@ -6,6 +6,7 @@
  "engine": "InnoDB",
  "field_order": [
   "default_network_interface",
+  "public_ip_address",
   "private_ip",
   "private_network_interface",
   "orchestrator_base_url",
@@ -53,13 +54,18 @@
    "fieldname": "ovs_bridge",
    "fieldtype": "Data",
    "label": "OVS Bridge"
+  },
+  {
+   "fieldname": "public_ip_address",
+   "fieldtype": "Data",
+   "label": "Public IP Address"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-11 12:41:56.085828",
+ "modified": "2026-03-12 17:04:24.764848",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Compute Settings",
