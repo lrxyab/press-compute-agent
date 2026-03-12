@@ -1,17 +1,11 @@
 network:
   version: 2
   ethernets:
-    ens1:
+    enp5s0:
       dhcp4: false
       addresses:
         - {{ ip_address }}/32
       routes:
         - to: 0.0.0.0/0
-          via: 62.210.0.1
+          via: {{ gateway }}
           on-link: true
-      nameservers:
-        addresses:
-          - 51.159.47.28
-          - 51.159.47.26
-    enp5s0:
-      dhcp4: true
