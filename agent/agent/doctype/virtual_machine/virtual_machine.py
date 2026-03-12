@@ -372,12 +372,9 @@ class VirtualMachine(Document):
 	def setup_public_ip_address(self):
 		if not self.public_ip_address:
 			return
-		interface = self.get_network_interface_by_mac_address(self.public_mac_address)
-		if not interface:
-			# This should ideally never get thrown
-			frappe.throw("Network interface not found for public_ip_address")
 		with pyroute2.IPRoute() as ipr:
-			iface_ids = ipr.link_lookup(ifname=interface)
+			bridge = frappe.db.get_single_value("Compute Settings", "ovs_bridge")
+			iface_ids = ipr.link_lookup(ifname=bridge)
 			if not iface_ids:
 				# This too should ideally never happen.
 				frappe.throw("The interface is defined in the VM's XML but not on the device.")
