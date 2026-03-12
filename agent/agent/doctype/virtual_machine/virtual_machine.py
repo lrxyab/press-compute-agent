@@ -6,7 +6,6 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from socket import AF_INET
 from typing import Literal
 from urllib.parse import urlencode, urljoin
 from uuid import uuid4
@@ -14,12 +13,10 @@ from xml.dom import minidom
 
 import frappe
 import libvirt
-import pyroute2
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils.caching import redis_cache
 from frappe.utils.synchronization import filelock
-from pyroute2.netlink.rtnl import ndmsg
 
 from agent.agent.doctype.virtual_machine_image.virtual_machine_image import get_vmi_download_token
 from agent.configuration.configs import XML_CONFIG
@@ -372,28 +369,7 @@ class VirtualMachine(Document):
 	def setup_public_ip_address(self):
 		if not self.public_ip_address:
 			return
-		with pyroute2.IPRoute() as ipr:
-			bridge = frappe.db.get_single_value("Compute Settings", "ovs_bridge")
-			iface_ids = ipr.link_lookup(ifname=bridge)
-			if not iface_ids:
-				# This too should ideally never happen.
-				frappe.throw("The interface is defined in the VM's XML but not on the device.")
-
-			iface_id = iface_ids[0]
-			ipr.link("set", index=iface_id, state="up")
-
-			# 253 == "scope link"
-			ipr.route("replace", dst=self.public_ip_address, oif=iface_id, scope=253)
-
-			# Static ARP entry
-			ipr.neigh(
-				"replace",
-				dst=self.public_ip_address,
-				lladdr=self.public_mac_address,
-				ifindex=iface_id,
-				state=ndmsg.states["permanent"],
-				family=AF_INET,
-			)
+		# TODO: Add flow rules and stuff
 
 	def get_network_interface_by_mac_address(self, mac_address: str):
 		# will work only when the VM is running.
