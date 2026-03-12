@@ -138,7 +138,7 @@ XML_CONFIG = """<domain type='kvm'>
       <model type='vga' vram='16384' heads='1' primary='yes'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x01' function='0x0'/>
     </video>
-    <watchdog model='itco' action='reset'/>
+    <watchdog model='i6300esb' action='reset'/>
     <memballoon model='virtio'>
       <address type='pci' domain='0x0000' bus='0x05' slot='0x00' function='0x0'/>
     </memballoon>
