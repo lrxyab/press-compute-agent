@@ -67,3 +67,18 @@ def mac_address_generator(ip_address: str):
 	ip_address_suffix = bytearray(ipaddress.ip_address(ip_address).packed)
 	mac_address_byte_array = bytearray([82, 84]) + ip_address_suffix
 	return ":".join(f"{b:02x}" for b in mac_address_byte_array)
+
+
+def mac_address_from_uuid(input_uuid: str | UUID):
+	if isinstance(input_uuid, str):
+		input_uuid = UUID(input_uuid)
+	import hashlib
+
+	h = hashlib.sha256(input_uuid.bytes).digest()
+	mac = bytearray(h[:6])
+	# Sets the unicast/multicast (I/G) bit to one
+	mac[0] |= 0x02
+	# Sets the universal/local (U/L) bit to zero
+	# e.g. 0b11111110 & 0b01000101 = 0b01000100
+	mac[0] &= 0xFE
+	return ":".join(f"{b:02x}" for b in mac)
