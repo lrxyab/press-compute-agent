@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlencode, urljoin
@@ -22,7 +23,7 @@ from agent.agent.doctype.virtual_machine_image.virtual_machine_image import get_
 from agent.configuration.configs import XML_CONFIG
 from agent.configuration.connections import libvirt_connection
 from agent.configuration.paths import CONFIG_PATH
-from agent.utils import get_connection_to_orchestrator, mac_address_generator
+from agent.utils import get_connection_to_orchestrator, mac_address_from_uuid, mac_address_generator
 
 DOMAIN_STATE_MAP = {
 	0: "Undefined",
@@ -619,6 +620,14 @@ class VirtualMachine(Document):
 		if not self.public_ip_address:
 			return None
 		return mac_address_generator(self.public_ip_address)
+
+	@property
+	def port_uuid(self):
+		return uuid.uuid5(uuid.NAMESPACE_OID, self.name)
+
+	@property
+	def private_mac_address(self):
+		return mac_address_from_uuid(self.port_uuid)
 
 
 def generate_disk_xml(disk: str, dev: str):
