@@ -803,11 +803,10 @@ def _new_vm_from_image(
 	memory,
 	number_of_vcpus,
 	public_ip_address,
-	private_ip_address=None,
-	private_network=None,
 	ssh_key=None,
 	cloud_init=None,
 	root_disk_size=None,
+	has_private_ip=False,
 	uuid=None,
 ):
 	provision_vmi_from_orchestrator(image)
@@ -823,7 +822,7 @@ def _new_vm_from_image(
 	vm.machine_type = machine_type
 	vm.memory = memory
 	vm.number_of_vcpus = number_of_vcpus
-	vm.has_private_ip = bool(private_ip_address)
+	vm.has_private_ip = has_private_ip
 
 	# vm.agent = agent.name
 
@@ -842,11 +841,10 @@ def new_vm_from_image(
 	memory: int,
 	number_of_vcpus: int,
 	public_ip_address: str,
-	private_ip_address: str | None = None,
-	private_network: str | None = None,
 	ssh_key: str | None = None,
 	cloud_init: str | None = None,
 	root_disk_size: int | None = None,
+	has_private_ip: bool = False,
 ):
 	# TODO: after profiling, it seems that disk creation takes the most time
 	# safely enqueue it in such a way it doesn't affect functionality
@@ -863,11 +861,10 @@ def new_vm_from_image(
 		memory=memory,
 		number_of_vcpus=number_of_vcpus,
 		public_ip_address=public_ip_address,
-		private_ip_address=private_ip_address,
-		private_network=private_network,
 		ssh_key=ssh_key,
 		cloud_init=cloud_init,
 		root_disk_size=root_disk_size,
+		has_private_ip=has_private_ip,
 		uuid=instance_id,
 		enqueue_after_commit=True,
 	)
