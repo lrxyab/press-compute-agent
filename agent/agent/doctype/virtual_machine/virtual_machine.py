@@ -597,6 +597,7 @@ class VirtualMachine(Document):
 			"agent/agent/doctype/virtual_machine/network-config.jinja2",
 			context={
 				"ip_address": self.public_ip_address,
+				"public_mac_address": self.public_mac_address,
 				"gateway": gateway,
 				"private_mac_address": self.private_mac_address,
 			},

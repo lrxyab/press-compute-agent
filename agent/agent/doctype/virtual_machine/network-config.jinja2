@@ -1,7 +1,9 @@
 network:
   version: 2
   ethernets:
-    enp5s0:
+    public:
+      match:
+        macaddress: {{ public_mac_address }}
       dhcp4: false
       addresses:
         - {{ ip_address }}/32
