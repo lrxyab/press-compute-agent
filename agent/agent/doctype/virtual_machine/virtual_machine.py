@@ -106,14 +106,16 @@ class VirtualMachine(Document):
 	def on_change(self):
 		if self.polled:
 			return
+		self.apply_config()
+		self.configure_disks()
+
+	def configure_disks(self):
 		doc_before_save = self.get_doc_before_save()
 
 		# check for state change
 		# if doc_before_save.memory != self.memory or doc_before_save.number_of_vcpus != self.number_of_vcpus or doc_before_save.disks != self.disks:
 		if not doc_before_save:
 			return
-		self.apply_config()
-
 		# hacky way to declaratively apply disks
 		prev_disks = set([(disk.disk, disk.device) for disk in doc_before_save.disks])
 		new_disks = set([(disk.disk, disk.device) for disk in self.disks])
