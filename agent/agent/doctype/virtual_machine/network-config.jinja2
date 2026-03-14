@@ -13,5 +13,7 @@ network:
         addresses:
           - 8.8.8.8
           - 4.4.4.4
-    enp9s0:
+    private:
+      match:
+        macaddress: {{ private_mac_address }}
       dhcp4: true

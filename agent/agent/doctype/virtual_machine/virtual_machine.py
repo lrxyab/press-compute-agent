@@ -595,7 +595,11 @@ class VirtualMachine(Document):
 		gateway = frappe.db.get_single_value("Compute Settings", "public_ip_address")
 		network_config = frappe.render_template(
 			"agent/agent/doctype/virtual_machine/network-config.jinja2",
-			context={"ip_address": self.public_ip_address, "gateway": gateway},
+			context={
+				"ip_address": self.public_ip_address,
+				"gateway": gateway,
+				"private_mac_address": self.private_mac_address,
+			},
 			is_path=True,
 		)
 
