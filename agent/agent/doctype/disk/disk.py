@@ -1,14 +1,17 @@
 # Copyright (c) 2025, ayush@frappe.io and contributors
 # For license information, please see license.txt
 
+import json
 import os
 import shutil
 import subprocess
 from uuid import uuid4
 
 import frappe
+import requests
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils.password import get_decrypted_password
 
 from agent.configuration.paths import CONFIG_PATH
 
@@ -51,7 +54,7 @@ class Disk(Document):
 			self.create_disk()
 
 	def get_path(self):
-		if storage_medium == "File":
+		if self.storage_medium == "File":
 			return os.path.join(DISKS_ROOT, self.uuid + ".qcow2")
 		return frappe.db.get_single_value("Compute Settings", "def_rbd_pool") + "/" + self.uuid
 
@@ -65,7 +68,7 @@ class Disk(Document):
 
 		if storage_medium == "CEPH":
 			if self.storage_medium == "CEPH":
-				ceph_api_key = frappe.db.get_single_value("Compute Settings", "ceph_api_key")
+				ceph_api_key = get_decrypted_password("Compute Settings", "Compute Settings", "ceph_api_key")
 				ceph_mgr_url = frappe.db.get_single_value("Compute Settings", "ceph_mgr_url")
 				headers = {
 					"Authorization": f"Bearer {ceph_api_key}",
@@ -73,15 +76,16 @@ class Disk(Document):
 					"Accept": "application/vnd.ceph.api.v1.0+json",
 				}
 				copyjson = {
-					dest_pool_name: self.file_path.split("/")[0],
-					dest_image_name: self.file_path.split("/")[1],
-					dest_namespace: "",  # we dont use namespaces but its a required param
+					"dest_pool_name": self.get_path().split("/")[0],
+					"dest_image_name": self.get_path().split("/")[1],
+					"dest_namespace": "",  # we dont use namespaces but its a required param
 				}
 				# %2F is encoding for the / character
 				requests.post(
 					ceph_mgr_url + "/api/block/image/" + base_image_path.replace("/", "%2F") + "/copy",
 					json=json.dumps(copyjson),
 					headers=headers,
+					verify=False,
 				)
 				self.set_disk_size()
 			else:
@@ -105,20 +109,22 @@ class Disk(Document):
 	def create_disk(self):
 		# TODO: find a way to do this without subprocess calls
 		if self.storage_medium == "CEPH":
-			ceph_api_key = frappe.db.get_single_value("Compute Settings", "ceph_api_key")
+			ceph_api_key = get_decrypted_password("Compute Settings", "Compute Settings", "ceph_api_key")
 			ceph_mgr_url = frappe.db.get_single_value("Compute Settings", "ceph_mgr_url")
 			headers = {
 				"Authorization": f"Bearer {ceph_api_key}",
 				"Content-Type": "application/json",
 				"Accept": "application/vnd.ceph.api.v1.0+json",
 			}
-			json = {
-				pool_name: self.file_path.split("/")[0],
-				name: self.file_path.split("/")[1],
-				size: size * 1024 * 1024 * 1024,  # GiB -> Bytes
+			createjson = {
+				"pool_name": self.get_path().split("/")[0],
+				"name": self.get_path().split("/")[1],
+				"size": self.size * 1024 * 1024 * 1024,  # GiB -> Bytes
 			}
 			# %2F is encoding for the / character
-			requests.post(ceph_mgr_url + "/api/block/image", json=json.dumps(json), headers=headers)
+			requests.post(
+				ceph_mgr_url + "/api/block/image", json=json.dumps(createjson), headers=headers, verify=False
+			)
 		else:
 			try:
 				subprocess.call(["qemu-img", "create", "-f", "qcow2", self.get_path(), f"{self.size}G"])
@@ -127,7 +133,7 @@ class Disk(Document):
 
 	def after_delete(self):
 		if self.storage_medium == "CEPH":
-			ceph_api_key = frappe.db.get_single_value("Compute Settings", "ceph_api_key")
+			ceph_api_key = get_decrypted_password("Compute Settings", "Compute Settings", "ceph_api_key")
 			ceph_mgr_url = frappe.db.get_single_value("Compute Settings", "ceph_mgr_url")
 			headers = {
 				"Authorization": f"Bearer {ceph_api_key}",
@@ -136,7 +142,9 @@ class Disk(Document):
 			}
 			# %2F is encoding for the / character
 			requests.delete(
-				ceph_mgr_url + "/api/block/image/" + self.file_path.replace("/", "%2F"), headers=headers
+				ceph_mgr_url + "/api/block/image/" + self.get_path().replace("/", "%2F"),
+				headers=headers,
+				verify=False,
 			)
 		else:
 			try:
@@ -148,7 +156,7 @@ class Disk(Document):
 		if self.storage_medium == "File":
 			subprocess.call(["qemu-img", "resize", "-f", "qcow2", self.get_path(), f"{self.size}G"])
 		else:
-			ceph_api_key = frappe.db.get_single_value("Compute Settings", "ceph_api_key")
+			ceph_api_key = get_decrypted_password("Compute Settings", "Compute Settings", "ceph_api_key")
 			ceph_mgr_url = frappe.db.get_single_value("Compute Settings", "ceph_mgr_url")
 			headers = {
 				"Authorization": f"Bearer {ceph_api_key}",
@@ -156,11 +164,12 @@ class Disk(Document):
 				"Accept": "application/vnd.ceph.api.v1.0+json",
 			}
 			resizejson = {
-				name: self.file_path.split("/")[1],
-				size: size * 1024 * 1024 * 1024,  # GiB -> Bytes
+				"name": self.get_path().split("/")[1],
+				"size": self.size * 1024 * 1024 * 1024,  # GiB -> Bytes
 			}
 			requests.put(
-				ceph_mgr_url + "/api/block/image/" + self.file_path.replace("/", "%2F"),
+				ceph_mgr_url + "/api/block/image/" + self.get_path().replace("/", "%2F"),
 				json=json.dumps(resizejson),
 				headers=headers,
+				verify=False,
 			)

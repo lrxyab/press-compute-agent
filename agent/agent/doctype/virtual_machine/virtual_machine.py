@@ -1,6 +1,7 @@
 # Copyright (c) 2025, ayush@frappe.io and contributors
 # For license information, please see license.txt
 
+import json
 import os
 import shutil
 import subprocess
@@ -17,6 +18,7 @@ import libvirt
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils.caching import redis_cache
+from frappe.utils.password import get_decrypted_password
 from frappe.utils.synchronization import filelock
 
 from agent.agent.doctype.virtual_machine_image.virtual_machine_image import get_vmi_download_token
@@ -130,14 +132,6 @@ class VirtualMachine(Document):
 				self.attach_disk(path, disk[1])
 
 	def on_trash(self):
-		# bad naming.
-		private_network_children = frappe.get_all(
-			"Private Network Machines", {"virtual_machine": self.name}, pluck="name"
-		)
-		for private_network_child in private_network_children:
-			grid_doc = frappe.get_doc("Private Network Machines", private_network_child)
-			grid_doc.delete()
-
 		self.undefine()
 
 	def after_delete(self):
@@ -290,7 +284,7 @@ class VirtualMachine(Document):
 		for disk in self.disks:
 			disk_doc = frappe.get_doc("Disk", disk.disk)
 			file_path = disk_doc.get_path()
-			disk_type = (doc.storage_medium == "CEPH" and "CEPH") or "Volume"
+			disk_type = (disk_doc.storage_medium == "CEPH" and "CEPH") or "Volume"
 			backing_chain = []
 			if disk_doc.is_snapshot:
 				current_disk_doc = disk_doc
@@ -327,21 +321,21 @@ class VirtualMachine(Document):
 	):
 		if not backing_chain:
 			backing_chain = []
-		disk_type = {"CEPH": "network", "Volume": "disk", "Seed": "cdrom"}[disk_type]
+		disk_type_attr = {"CEPH": "network", "Volume": "file", "Seed": "file"}[disk_type]
 		disk_device = {"CEPH": "disk", "Volume": "disk", "Seed": "cdrom"}[disk_type]
 		driver_type = {"CEPH": "raw", "Volume": "qcow2", "Seed": "raw"}[disk_type]
 		target_bus = {"CEPH": "virtio", "Volume": "virtio", "Seed": "sata"}[disk_type]
 
 		disk_elem = parent_xml.createElement("disk")
-		disk_elem.setAttribute("type", disk_type)
+		disk_elem.setAttribute("type", disk_type_attr)
 		disk_elem.setAttribute("device", disk_device)
 
 		driver = parent_xml.createElement("driver")
 		driver.setAttribute("name", "qemu")
 		driver.setAttribute("type", driver_type)
 		if disk_type == "CEPH":
-			driver.set_attribute("cache", "none")
-			driver.set_attribute("io", "native")
+			driver.setAttribute("cache", "none")
+			driver.setAttribute("io", "native")
 		disk_elem.appendChild(driver)
 
 		if disk_type == "CEPH":
@@ -349,7 +343,9 @@ class VirtualMachine(Document):
 			auth.setAttribute("username", "libvirt")
 			secret = parent_xml.createElement("secret")
 			secret.setAttribute("type", "ceph")
-			secret.setAttribute("uuid", frappe.db.get_single_value("Compute Settings", "libvirt_rbd_secret"))
+			secret.setAttribute(
+				"uuid", get_decrypted_password("Compute Settings", "Compute Settings", "libvirt_rbd_secret")
+			)
 			auth.appendChild(secret)
 			disk_elem.appendChild(auth)
 
@@ -360,7 +356,7 @@ class VirtualMachine(Document):
 			mons = json.loads(frappe.db.get_single_value("Compute Settings", "monitor"))
 			for mon in mons:
 				host = parent_xml.createElement("host")
-				host.setAttribute("name", mon["name"])
+				host.setAttribute("name", mon["host"])
 				host.setAttribute("port", mon["port"])
 				source.appendChild(host)
 		else:
@@ -472,10 +468,11 @@ class VirtualMachine(Document):
 	def attach_disk(self, disk: str, dev: str):
 		from xml.dom import minidom
 
-		disk_type = (frappe.get_value("Disk", disk, "storage_medium") == "CEPH" and "CEPH") or "Volume"
+		disk_type = (
+			frappe.get_value("Disk", {"file_path": disk}, "storage_medium") == "CEPH" and "CEPH"
+		) or "Volume"
 		xml = self.create_disk_config(disk, dev, disk_type, minidom.Document())
-
-		self.domain.attachDeviceFlags(xml, libvirt.VIR_DOMAIN_AFFECT_LIVE)
+		self.domain.attachDeviceFlags(xml.toxml(), libvirt.VIR_DOMAIN_AFFECT_LIVE)
 
 	def detach_disk(self, dev: str):
 		xml_string = self.domain.XMLDesc()
