@@ -132,14 +132,6 @@ class VirtualMachine(Document):
 			self.refresh_private_network_interface()
 
 	def on_trash(self):
-		# bad naming.
-		private_network_children = frappe.get_all(
-			"Private Network Machines", {"virtual_machine": self.name}, pluck="name"
-		)
-		for private_network_child in private_network_children:
-			grid_doc = frappe.get_doc("Private Network Machines", private_network_child)
-			grid_doc.delete()
-
 		self.undefine()
 
 	def after_delete(self):
