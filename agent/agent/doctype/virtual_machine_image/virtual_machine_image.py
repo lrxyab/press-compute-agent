@@ -24,8 +24,10 @@ class VirtualMachineImage(Document):
 
 		file_path: DF.Data | None
 		is_from_vm: DF.Check
+		osinfo: DF.Data | None
 		size: DF.Data | None
 		status: DF.Literal["Draft", "Pending", "Ongoing", "Available"]
+		storage_medium: DF.Literal["File", "CEPH"]
 		virtual_machine: DF.Link | None
 	# end: auto-generated types
 
@@ -39,7 +41,11 @@ class VirtualMachineImage(Document):
 
 	@frappe.whitelist()
 	def take_image(self):
-		frappe.enqueue_doc("Virtual Machine Image", self.name, "_take_image")
+		if self.storage_medium == "File":
+			frappe.enqueue_doc("Virtual Machine Image", self.name, "_take_image")
+		else:
+			print("not implemented")
+			return
 
 	def _take_image(self):
 		image_path = Path(CONFIG_PATH, "images", f"{uuid4()}.qcow2")
@@ -61,17 +67,19 @@ class VirtualMachineImage(Document):
 
 @frappe.whitelist()
 def create_image(instance_id):
-	virtual_machine = frappe.db.get_value("Virtual Machine", {"uuid": instance_id})
-	virtual_machine_image_doc = frappe.new_doc("Virtual Machine Image")
-	virtual_machine_image_doc.name = f"{virtual_machine}-image-{frappe.utils.random_string(5)}"
-	virtual_machine_image_doc.virtual_machine = virtual_machine
-	virtual_machine_image_doc.is_from_vm = True
-	virtual_machine_image_doc.status = "Ongoing"
+	if self.storage_medium == "File":
+		virtual_machine = frappe.db.get_value("Virtual Machine", {"uuid": instance_id})
+		virtual_machine_image_doc = frappe.new_doc("Virtual Machine Image")
+		virtual_machine_image_doc.name = f"{virtual_machine}-image-{frappe.utils.random_string(5)}"
+		virtual_machine_image_doc.virtual_machine = virtual_machine
+		virtual_machine_image_doc.is_from_vm = True
+		virtual_machine_image_doc.status = "Ongoing"
 
-	virtual_machine_image_doc.save()
+		virtual_machine_image_doc.save()
 
-	frappe.enqueue_doc("Virtual Machine Image", virtual_machine_image_doc.name, "_take_image")
-	return virtual_machine_image_doc.name
+		frappe.enqueue_doc("Virtual Machine Image", virtual_machine_image_doc.name, "_take_image")
+		return virtual_machine_image_doc.name
+	return "not implemented"
 
 
 # used by the agent downloading the vmi
@@ -93,9 +101,12 @@ def download_vmi(token: str):
 		return "No such virtual machine image"
 
 	file_path = frappe.db.get_value("Virtual Machine Image", name, "file_path")
+	medium = frappe.db.get_value("Virtual Machine Image", name, "storage_medium")
 	if not file_path:
 		frappe.response.http_status_code = 404
 		return "No filepath for the virtual machine image"
-	return send_file(
-		file_path, environ=frappe.request.environ, conditional=True, download_name=f"{name}.qcow2"
-	)
+	if medium == "file":
+		return send_file(
+			file_path, environ=frappe.request.environ, conditional=True, download_name=f"{name}.qcow2"
+		)
+	return "not implemented"

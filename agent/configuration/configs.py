@@ -9,6 +9,7 @@ XML_CONFIG = """<domain type='kvm'>
   <memory unit='KiB'>524288</memory>
   <currentMemory unit='KiB'>524288</currentMemory>
   <vcpu placement='static'>1</vcpu>
+  <iothreads>1</iothreads>
   <os>
     <type arch='x86_64' machine='q35'>hvm</type>
     <boot dev='hd'/>

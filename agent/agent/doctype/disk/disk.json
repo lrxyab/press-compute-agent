@@ -13,7 +13,8 @@
   "column_break_ztmf",
   "file_path",
   "backing_file",
-  "is_snapshot"
+  "is_snapshot",
+  "storage_medium"
  ],
  "fields": [
   {
@@ -64,12 +65,19 @@
    "fieldname": "is_snapshot",
    "fieldtype": "Check",
    "label": "Is Snapshot"
+  },
+  {
+   "default": "File",
+   "fieldname": "storage_medium",
+   "fieldtype": "Select",
+   "label": "Storage Medium",
+   "options": "File\nCEPH"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-16 05:33:12.854471",
+ "modified": "2026-03-14 20:07:42.030906",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Disk",

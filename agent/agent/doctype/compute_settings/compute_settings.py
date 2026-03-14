@@ -14,7 +14,12 @@ class ComputeSettings(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
+		ceph_api_key: DF.Password | None
+		ceph_mgr_url: DF.Data | None
+		def_rbd_pool: DF.Data | None
 		default_network_interface: DF.Data | None
+		libvirt_rbd_secret: DF.Password | None
+		monitor: DF.JSON | None
 		orchestrator_api_key: DF.Data | None
 		orchestrator_api_secret: DF.Password | None
 		orchestrator_base_url: DF.Data | None

@@ -87,6 +87,9 @@ class VirtualMachine(Document):
 			root_disk.is_primary_disk = True
 			root_disk.size = self.root_disk_size
 			root_disk.virtual_machine_image = self.virtual_machine_image
+			root_disk.storage_medium = frappe.get_value(
+				"Virtual Machine Image", self.virtual_machine_image, "storage_medium"
+			)
 			root_disk.insert()
 			self.append("disks", {"disk": root_disk.name, "device": "vda"})
 
@@ -287,6 +290,7 @@ class VirtualMachine(Document):
 		for disk in self.disks:
 			disk_doc = frappe.get_doc("Disk", disk.disk)
 			file_path = disk_doc.get_path()
+			disk_type = (doc.storage_medium == "CEPH" and "CEPH") or "Volume"
 			backing_chain = []
 			if disk_doc.is_snapshot:
 				current_disk_doc = disk_doc
@@ -297,11 +301,10 @@ class VirtualMachine(Document):
 
 					if not current_disk_doc.is_snapshot:
 						break
-
 			disk_elem = self.create_disk_config(
 				file_path=file_path,
 				dev=disk.device,
-				disk_type="Volume",
+				disk_type=disk_type,
 				parent_xml=self.xml,
 				backing_chain=backing_chain,
 			)
@@ -315,25 +318,53 @@ class VirtualMachine(Document):
 		self.device_config = devices
 
 	def create_disk_config(
-		self, file_path: str, dev: str, disk_type: Literal["Volume", "Seed"], parent_xml, backing_chain=None
+		self,
+		file_path: str,
+		dev: str,
+		disk_type: Literal["Volume", "Seed", "CEPH"],
+		parent_xml,
+		backing_chain=None,
 	):
 		if not backing_chain:
 			backing_chain = []
-		disk_device = {"Volume": "disk", "Seed": "cdrom"}[disk_type]
-		driver_type = {"Volume": "qcow2", "Seed": "raw"}[disk_type]
-		target_bus = {"Volume": "virtio", "Seed": "sata"}[disk_type]
+		disk_type = {"CEPH": "network", "Volume": "disk", "Seed": "cdrom"}[disk_type]
+		disk_device = {"CEPH": "disk", "Volume": "disk", "Seed": "cdrom"}[disk_type]
+		driver_type = {"CEPH": "raw", "Volume": "qcow2", "Seed": "raw"}[disk_type]
+		target_bus = {"CEPH": "virtio", "Volume": "virtio", "Seed": "sata"}[disk_type]
 
 		disk_elem = parent_xml.createElement("disk")
-		disk_elem.setAttribute("type", "file")
+		disk_elem.setAttribute("type", disk_type)
 		disk_elem.setAttribute("device", disk_device)
 
 		driver = parent_xml.createElement("driver")
 		driver.setAttribute("name", "qemu")
 		driver.setAttribute("type", driver_type)
+		if disk_type == "CEPH":
+			driver.set_attribute("cache", "none")
+			driver.set_attribute("io", "native")
 		disk_elem.appendChild(driver)
 
+		if disk_type == "CEPH":
+			auth = parent_xml.createElement("auth")
+			auth.setAttribute("username", "libvirt")
+			secret = parent_xml.createElement("secret")
+			secret.setAttribute("type", "ceph")
+			secret.setAttribute("uuid", frappe.db.get_single_value("Compute Settings", "libvirt_rbd_secret"))
+			auth.appendChild(secret)
+			disk_elem.appendChild(auth)
+
 		source = parent_xml.createElement("source")
-		source.setAttribute("file", file_path)
+		if disk_type == "CEPH":
+			source.setAttribute("protocol", "rbd")
+			source.setAttribute("name", file_path)
+			mons = json.loads(frappe.db.get_single_value("Compute Settings", "monitor"))
+			for mon in mons:
+				host = parent_xml.createElement("host")
+				host.setAttribute("name", mon["name"])
+				host.setAttribute("port", mon["port"])
+				source.appendChild(host)
+		else:
+			source.setAttribute("file", file_path)
 		disk_elem.appendChild(source)
 
 		backing_parent_xml = disk_elem
@@ -441,7 +472,8 @@ class VirtualMachine(Document):
 	def attach_disk(self, disk: str, dev: str):
 		from xml.dom import minidom
 
-		xml = self.create_disk_config(disk, dev, "Volume", minidom.Document())
+		disk_type = (frappe.get_value("Disk", disk, "storage_medium") == "CEPH" and "CEPH") or "Volume"
+		xml = self.create_disk_config(disk, dev, disk_type, minidom.Document())
 
 		self.domain.attachDeviceFlags(xml, libvirt.VIR_DOMAIN_AFFECT_LIVE)
 
@@ -453,6 +485,7 @@ class VirtualMachine(Document):
 			if disk_dev == dev:
 				self.domain.detachDeviceFlags(disk.toxml(), libvirt.VIR_DOMAIN_AFFECT_LIVE)
 
+	# To delete?
 	def delete_disk(self, dev: str):
 		xml_string = self.domain.XMLDesc()
 		xml = minidom.parseString(xml_string)
@@ -630,6 +663,7 @@ class VirtualMachine(Document):
 		return mac_address_from_uuid(self.port_uuid)
 
 
+# Also unused/deprecated?
 def generate_disk_xml(disk: str, dev: str):
 	# never gonna hardcode xml!
 	# TODO: generalise for other devices when required in the future
@@ -715,27 +749,6 @@ def get_all_disks():
 	disk_doc = frappe.qb.DocType("Disk")
 	query = frappe.qb.from_(disk_doc).select("name", "file_path")
 	return {i.file_path: i.name for i in query.run(as_dict=True)}
-
-
-def parse_machine_details(xml_string: str):
-	out = {"memory": 0, "vcpus": 0, "disks": [], "network_devices": []}
-
-	xml = minidom.parseString(xml_string)
-	vcpus = int(xml.getElementsByTagName("vcpu")[0].childNodes[0].nodeValue)
-	memory = int(xml.getElementsByTagName("memory")[0].childNodes[0].nodeValue)
-	disk_elements = xml.getElementsByTagName("disk")
-	disks = []
-	for disk_element in disk_elements:
-		file_path = disk_element.getElementsByTagName("source")[0].getAttribute("file")
-		disk_name = frappe.get_value("Disk", {"file_path": file_path}, "name")
-		dev = disk_element.getElementsByTagName("target")[0].getAttribute("dev")
-		disks.append({"name": disk_name, "path": file_path, "dev": dev})
-
-	out["vcpus"] = vcpus
-	out["memory"] = memory / (1024 * 1024)
-	out["disks"] = disks
-	# out["network_interfaces"] =
-	return out
 
 
 # TODO: move to orchestrator
