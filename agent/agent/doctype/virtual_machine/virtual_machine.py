@@ -823,23 +823,11 @@ def _new_vm_from_image(
 	vm.machine_type = machine_type
 	vm.memory = memory
 	vm.number_of_vcpus = number_of_vcpus
+	vm.has_private_ip = bool(private_ip_address)
 
 	# vm.agent = agent.name
 
 	vm.insert()
-
-	if private_network:
-		private_network_doc = frappe.get_doc("Private Network", private_network)
-		private_network_doc.append(
-			"virtual_machines",
-			{"virtual_machine": vm.name, "ip_address": private_ip_address},
-		)
-		private_network_doc.save()
-
-	vm.load_from_db()
-
-	# vm.load_from_db()
-	vm.save()
 	vm.start()
 
 	# this will be the instance_id to track the VM state
