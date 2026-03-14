@@ -15,6 +15,7 @@
   "uuid",
   "virtual_machine_image",
   "public_ip_address",
+  "has_private_ip",
   "section_break_frdk",
   "disks",
   "network_interfaces",
@@ -123,12 +124,19 @@
    "is_virtual": 1,
    "label": "State",
    "options": "Undefined\nStopped\nRunning\nPaused\nSaved"
+  },
+  {
+   "default": "0",
+   "description": "The specifics are configured completely through the Orchestrator. This is just present to attach/detach the network interface.",
+   "fieldname": "has_private_ip",
+   "fieldtype": "Check",
+   "label": "Has Private IP"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-10 17:10:44.627503",
+ "modified": "2026-03-14 18:03:52.344617",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine",

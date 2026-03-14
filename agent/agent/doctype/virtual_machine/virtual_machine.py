@@ -50,6 +50,7 @@ class VirtualMachine(Document):
 
 		cloud_init: DF.Code | None
 		disks: DF.Table[VMDisk]
+		has_private_ip: DF.Check
 		memory: DF.Int
 		network_interfaces: DF.Table[NetworkInterface]
 		number_of_vcpus: DF.Int
