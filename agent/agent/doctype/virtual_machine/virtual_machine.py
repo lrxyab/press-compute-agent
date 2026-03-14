@@ -394,15 +394,22 @@ class VirtualMachine(Document):
 		return None
 
 	def append_network_interface_to_config(
-		self, type: Literal["Network", "Bridge", "Direct"], name: str, mac_address: str | None = None
+		self,
+		type: Literal["Network", "Bridge", "Direct"],
+		name: str,
+		mac_address: str | None = None,
+		interface_id: str | None = None,
 	):
-		return self.generate_network_interface_xml(type, name, mac_address)
+		return self.generate_network_interface_xml(
+			type, name, mac_address=mac_address, interface_id=interface_id
+		)
 
 	def generate_network_interface_xml(
 		self,
 		type: Literal["Network", "Bridge", "Direct"],
 		name: str,
 		mac_address: str | None = None,
+		interface_id: str | None = None,
 		device_xml_only=False,
 	):
 		if not device_xml_only:
@@ -431,9 +438,13 @@ class VirtualMachine(Document):
 				source.setAttribute("bridge", name)
 				interface.appendChild(source)
 
-				vport = parent_xml.createElement("virtualport")
-				vport.setAttribute("type", "openvswitch")
-				interface.appendChild(vport)
+				virtualport = parent_xml.createElement("virtualport")
+				virtualport.setAttribute("type", "openvswitch")
+				if interface_id:
+					parameters = parent_xml.createElement("parameters")
+					parameters.setAttribute("interfaceid", interface_id)
+					virtualport.appendChild(parameters)
+				interface.appendChild(virtualport)
 
 				model = parent_xml.createElement("model")
 				model.setAttribute("type", "virtio")
