@@ -113,6 +113,7 @@ class VirtualMachine(Document):
 		self.configure_private_network_interface()
 
 	def configure_disks(self):
+		doc_before_save = self.get_doc_before_save()
 		# hacky way to declaratively apply disks
 		prev_disks = set([(disk.disk, disk.device) for disk in doc_before_save.disks])
 		new_disks = set([(disk.disk, disk.device) for disk in self.disks])
