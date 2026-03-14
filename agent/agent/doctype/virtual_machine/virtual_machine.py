@@ -108,6 +108,7 @@ class VirtualMachine(Document):
 			return
 		self.apply_config()
 		self.configure_disks()
+		self.configure_private_network_interface()
 
 	def configure_disks(self):
 		doc_before_save = self.get_doc_before_save()
@@ -128,6 +129,10 @@ class VirtualMachine(Document):
 				disk_doc = frappe.get_doc("Disk", disk[0])
 				path = disk_doc.file_path
 				self.attach_disk(path, disk[1])
+
+	def configure_private_network_interface(self):
+		if self.has_value_changed("has_private_ip"):
+			self.refresh_private_network_interface()
 
 	def on_trash(self):
 		# bad naming.
@@ -369,6 +374,12 @@ class VirtualMachine(Document):
 				frappe.throw("Bridge not set in Compute Settings")
 
 			self.append_network_interface_to_config("Bridge", bridge, mac_address=self.public_mac_address)
+		if self.has_private_ip:
+			# Hardcoding bridge name right now. Safe to assume br-int is the
+			# default bridge name for OVN on most installations.
+			self.append_network_interface_to_config(
+				"Bridge", "br-int", mac_address=self.private_mac_address, interface_id=str(self.port_uuid)
+			)
 
 	def setup_public_ip_address(self):
 		if not self.public_ip_address:
@@ -626,6 +637,32 @@ class VirtualMachine(Document):
 				frappe.throw(f"{e}")
 			finally:
 				shutil.rmtree(temp_path)
+
+	def refresh_private_network_interface(self):
+		# Detaching and reattaching forces netplan to be loaded
+		interface_config = self.generate_network_interface_xml(
+			"Bridge",
+			"br-int",
+			self.private_mac_address,
+			interface_id=str(self.port_uuid),
+			device_xml_only=True,
+		)
+		interface_config = interface_config.toxml()
+		if self.domain:
+			try:
+				self.domain.detachDeviceFlags(
+					interface_config, libvirt.VIR_DOMAIN_AFFECT_LIVE | libvirt.VIR_DOMAIN_AFFECT_CONFIG
+				)
+			except Exception as e:
+				if e.get_error_code() == libvirt.VIR_ERR_DEVICE_MISSING:
+					pass
+				else:
+					raise e
+
+			if self.has_private_ip:
+				self.domain.attachDeviceFlags(
+					interface_config, libvirt.VIR_DOMAIN_AFFECT_LIVE | libvirt.VIR_DOMAIN_AFFECT_CONFIG
+				)
 
 	@property
 	def reboot_lock_key(self):
