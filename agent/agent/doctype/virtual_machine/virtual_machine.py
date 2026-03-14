@@ -100,23 +100,19 @@ class VirtualMachine(Document):
 		if self.polled:
 			return
 
-		# sunsetting this since there is a forced creation of root disk
-		# self.validate_root_device_exists()
-
 	def on_change(self):
 		if self.polled:
 			return
 		self.apply_config()
+
+		# The code after this will only run on subsequent changes and not on insert
+		doc_before_save = self.get_doc_before_save()
+		if not doc_before_save:
+			return
 		self.configure_disks()
 		self.configure_private_network_interface()
 
 	def configure_disks(self):
-		doc_before_save = self.get_doc_before_save()
-
-		# check for state change
-		# if doc_before_save.memory != self.memory or doc_before_save.number_of_vcpus != self.number_of_vcpus or doc_before_save.disks != self.disks:
-		if not doc_before_save:
-			return
 		# hacky way to declaratively apply disks
 		prev_disks = set([(disk.disk, disk.device) for disk in doc_before_save.disks])
 		new_disks = set([(disk.disk, disk.device) for disk in self.disks])
@@ -654,6 +650,7 @@ class VirtualMachine(Document):
 					interface_config, libvirt.VIR_DOMAIN_AFFECT_LIVE | libvirt.VIR_DOMAIN_AFFECT_CONFIG
 				)
 			except Exception as e:
+				# If it's not attached in the first place, continue.
 				if e.get_error_code() == libvirt.VIR_ERR_DEVICE_MISSING:
 					pass
 				else:
