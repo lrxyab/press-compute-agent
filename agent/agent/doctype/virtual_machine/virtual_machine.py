@@ -895,16 +895,6 @@ def get_vm_details_from_instance_id(instance_id):
 	return vm_dict
 
 
-@frappe.whitelist()
-def terminate(name):
-	vmi_doc = frappe.qb.DocType("Virtual Machine Image")
-	query = frappe.qb.update(vmi_doc).where(vmi_doc.virtual_machine == name).set("virtual_machine", None)
-	query.run()
-
-	vm_doc = frappe.get_doc("Virtual Machine", name)
-	vm_doc.delete()
-
-
 def provision_vmi_from_orchestrator(image: str):
 	# 1 minute validity
 	download_token = get_vmi_download_token(image)
