@@ -17,7 +17,9 @@
   "ceph_api_key",
   "def_rbd_pool",
   "monitor",
-  "ceph_mgr_url"
+  "ceph_mgr_url",
+  "ceph_mgr_username",
+  "ceph_mgr_password"
  ],
  "fields": [
   {
@@ -71,9 +73,10 @@
    "label": "Libvirt RBD Secret"
   },
   {
+   "default": "replaceme",
    "fieldname": "ceph_api_key",
    "fieldtype": "Password",
-   "label": "CEPH API Key"
+   "label": "CEPH API Key (autoset)"
   },
   {
    "fieldname": "def_rbd_pool",
@@ -89,13 +92,23 @@
    "fieldname": "ceph_mgr_url",
    "fieldtype": "Data",
    "label": "CEPH Mgr URL"
+  },
+  {
+   "fieldname": "ceph_mgr_username",
+   "fieldtype": "Data",
+   "label": "CEPH MGR Username"
+  },
+  {
+   "fieldname": "ceph_mgr_password",
+   "fieldtype": "Password",
+   "label": "CEPH MGR Password"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-14 20:32:11.056992",
+ "modified": "2026-03-15 17:12:07.507601",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Compute Settings",

@@ -43,7 +43,9 @@ class Disk(Document):
 		file_path = self.get_path()
 		self.file_path = file_path
 		self.ceph = Ceph(
-			file_path, get_decrypted_password("Compute Settings", "Compute Settings", "ceph_api_key")
+			file_path,
+			get_decrypted_password("Compute Settings", "Compute Settings", "ceph_api_key"),
+			get_decrypted_password("Compute Settings", "Compute Settings", "ceph_mgr_password"),
 		)
 
 	def before_insert(self):

@@ -15,7 +15,9 @@ class ComputeSettings(Document):
 		from frappe.types import DF
 
 		ceph_api_key: DF.Password | None
+		ceph_mgr_password: DF.Password | None
 		ceph_mgr_url: DF.Data | None
+		ceph_mgr_username: DF.Data | None
 		def_rbd_pool: DF.Data | None
 		default_network_interface: DF.Data | None
 		libvirt_rbd_secret: DF.Password | None
