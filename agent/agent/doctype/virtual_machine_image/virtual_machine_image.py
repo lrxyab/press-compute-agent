@@ -57,6 +57,7 @@ class VirtualMachineImage(Document):
 				self.size = frappe.db.get_value("Disk", root_disk_name, "size")
 				break
 
+		self.sha256sum = get_sha256sum_of_file(self.file_path)
 		self.save()
 
 
@@ -85,3 +86,11 @@ def download_vmi(token: str):
 	return send_file(
 		file_path, environ=frappe.request.environ, conditional=True, download_name=f"{name}.qcow2"
 	)
+
+
+def get_sha256sum_of_file(file_path: str):
+	with open(file_path, "rb") as file:
+		import hashlib
+
+		digest = hashlib.file_digest(file, "sha256")
+		return digest.hexdigest()
