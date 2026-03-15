@@ -874,27 +874,6 @@ def new_vm_from_image(
 	return instance_id
 
 
-@frappe.whitelist(methods=["GET"])
-def get_vm_details_from_instance_id(instance_id):
-	vm_doc = frappe.get_doc("Virtual Machine", {"uuid": instance_id})
-	vm_dict = vm_doc.as_dict()
-
-	# private ip addresses
-	vm_dict["private_ip_addresses"] = frappe.get_all(
-		"Private Network Machines", {"virtual_machine": vm_doc.name}, pluck="ip_address"
-	)
-	new_disks = []
-
-	for disk in vm_dict["disks"]:
-		name = disk["name"]
-		size = frappe.get_value("Disk", name, "size")
-		disk["size"] = size
-		new_disks.append(disk)
-
-	vm_dict["disks"] = new_disks
-	return vm_dict
-
-
 def provision_vmi_from_orchestrator(image: str):
 	# 1 minute validity
 	download_token = get_vmi_download_token(image)
