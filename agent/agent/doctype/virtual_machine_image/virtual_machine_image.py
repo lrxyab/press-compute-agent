@@ -60,21 +60,6 @@ class VirtualMachineImage(Document):
 		self.save()
 
 
-@frappe.whitelist()
-def create_image(instance_id):
-	virtual_machine = frappe.db.get_value("Virtual Machine", {"uuid": instance_id})
-	virtual_machine_image_doc = frappe.new_doc("Virtual Machine Image")
-	virtual_machine_image_doc.name = f"{virtual_machine}-image-{frappe.utils.random_string(5)}"
-	virtual_machine_image_doc.virtual_machine = virtual_machine
-	virtual_machine_image_doc.is_from_vm = True
-	virtual_machine_image_doc.status = "Ongoing"
-
-	virtual_machine_image_doc.save()
-
-	frappe.enqueue_doc("Virtual Machine Image", virtual_machine_image_doc.name, "_take_image")
-	return virtual_machine_image_doc.name
-
-
 # used by the agent downloading the vmi
 def get_vmi_download_token(name: str):
 	connection = get_connection_to_orchestrator()
