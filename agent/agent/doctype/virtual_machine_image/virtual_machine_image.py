@@ -24,6 +24,7 @@ class VirtualMachineImage(Document):
 
 		file_path: DF.Data | None
 		is_from_vm: DF.Check
+		sha256sum: DF.Data | None
 		size: DF.Data | None
 		status: DF.Literal["Draft", "Pending", "Ongoing", "Available"]
 		virtual_machine: DF.Link | None

@@ -10,6 +10,7 @@
   "file_path",
   "virtual_machine",
   "status",
+  "sha256sum",
   "column_break_ltbd",
   "is_from_vm",
   "size"
@@ -58,12 +59,17 @@
    "fieldname": "size",
    "fieldtype": "Data",
    "label": "Size"
+  },
+  {
+   "fieldname": "sha256sum",
+   "fieldtype": "Data",
+   "label": "SHA256Sum"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-03 17:29:12.364657",
+ "modified": "2026-03-16 00:28:04.676586",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine Image",
