@@ -9,6 +9,7 @@ from uuid import uuid4
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils.password import get_decrypted_password
 
 from agent.agent.ceph_lib.ceph import Ceph
 from agent.configuration.paths import CONFIG_PATH
@@ -41,7 +42,9 @@ class Disk(Document):
 			self.uuid = str(uuid4())
 		file_path = self.get_path()
 		self.file_path = file_path
-		self.ceph = Ceph(file_path)
+		self.ceph = Ceph(
+			file_path, get_decrypted_password("Compute Settings", "Compute Settings", "ceph_api_key")
+		)
 
 	def before_insert(self):
 		if self.is_snapshot:
