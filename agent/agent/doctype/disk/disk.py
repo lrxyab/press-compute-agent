@@ -1,18 +1,16 @@
 # Copyright (c) 2025, ayush@frappe.io and contributors
 # For license information, please see license.txt
 
-import json
 import os
 import shutil
 import subprocess
 from uuid import uuid4
 
 import frappe
-import requests
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils.password import get_decrypted_password
 
+from agent.agent.ceph_lib.ceph import Ceph
 from agent.configuration.paths import CONFIG_PATH
 
 DISKS_ROOT = os.path.join(CONFIG_PATH, "disks")
@@ -43,6 +41,7 @@ class Disk(Document):
 			self.uuid = str(uuid4())
 		file_path = self.get_path()
 		self.file_path = file_path
+		self.ceph = Ceph(file_path)
 
 	def before_insert(self):
 		if self.is_snapshot:
@@ -68,26 +67,7 @@ class Disk(Document):
 
 		if storage_medium == "CEPH":
 			if self.storage_medium == "CEPH":
-				ceph_api_key = get_decrypted_password("Compute Settings", "Compute Settings", "ceph_api_key")
-				ceph_mgr_url = frappe.db.get_single_value("Compute Settings", "ceph_mgr_url")
-				headers = {
-					"Authorization": f"Bearer {ceph_api_key}",
-					"Content-Type": "application/json",
-					"Accept": "application/vnd.ceph.api.v1.0+json",
-				}
-				copyjson = {
-					"dest_pool_name": self.get_path().split("/")[0],
-					"dest_image_name": self.get_path().split("/")[1],
-					"dest_namespace": "",  # we dont use namespaces but its a required param
-				}
-				# %2F is encoding for the / character
-				requests.post(
-					ceph_mgr_url + "/api/block/image/" + base_image_path.replace("/", "%2F") + "/copy",
-					json=json.dumps(copyjson),
-					headers=headers,
-					verify=False,
-				)
-				self.set_disk_size()
+				self.ceph.create_disk_from_image(base_image_path, self.size)
 			else:
 				frappe.throw(
 					_("Failed to create disk: Virtual Machine Image and Disk Mediums dont match").format()
@@ -109,22 +89,7 @@ class Disk(Document):
 	def create_disk(self):
 		# TODO: find a way to do this without subprocess calls
 		if self.storage_medium == "CEPH":
-			ceph_api_key = get_decrypted_password("Compute Settings", "Compute Settings", "ceph_api_key")
-			ceph_mgr_url = frappe.db.get_single_value("Compute Settings", "ceph_mgr_url")
-			headers = {
-				"Authorization": f"Bearer {ceph_api_key}",
-				"Content-Type": "application/json",
-				"Accept": "application/vnd.ceph.api.v1.0+json",
-			}
-			createjson = {
-				"pool_name": self.get_path().split("/")[0],
-				"name": self.get_path().split("/")[1],
-				"size": self.size * 1024 * 1024 * 1024,  # GiB -> Bytes
-			}
-			# %2F is encoding for the / character
-			requests.post(
-				ceph_mgr_url + "/api/block/image", json=json.dumps(createjson), headers=headers, verify=False
-			)
+			self.ceph.create_disk(self.size)
 		else:
 			try:
 				subprocess.call(["qemu-img", "create", "-f", "qcow2", self.get_path(), f"{self.size}G"])
@@ -133,19 +98,7 @@ class Disk(Document):
 
 	def after_delete(self):
 		if self.storage_medium == "CEPH":
-			ceph_api_key = get_decrypted_password("Compute Settings", "Compute Settings", "ceph_api_key")
-			ceph_mgr_url = frappe.db.get_single_value("Compute Settings", "ceph_mgr_url")
-			headers = {
-				"Authorization": f"Bearer {ceph_api_key}",
-				"Content-Type": "application/json",
-				"Accept": "application/vnd.ceph.api.v1.0+json",
-			}
-			# %2F is encoding for the / character
-			requests.delete(
-				ceph_mgr_url + "/api/block/image/" + self.get_path().replace("/", "%2F"),
-				headers=headers,
-				verify=False,
-			)
+			self.ceph.delete_disk()
 		else:
 			try:
 				os.remove(self.file_path)
@@ -156,20 +109,4 @@ class Disk(Document):
 		if self.storage_medium == "File":
 			subprocess.call(["qemu-img", "resize", "-f", "qcow2", self.get_path(), f"{self.size}G"])
 		else:
-			ceph_api_key = get_decrypted_password("Compute Settings", "Compute Settings", "ceph_api_key")
-			ceph_mgr_url = frappe.db.get_single_value("Compute Settings", "ceph_mgr_url")
-			headers = {
-				"Authorization": f"Bearer {ceph_api_key}",
-				"Content-Type": "application/json",
-				"Accept": "application/vnd.ceph.api.v1.0+json",
-			}
-			resizejson = {
-				"name": self.get_path().split("/")[1],
-				"size": self.size * 1024 * 1024 * 1024,  # GiB -> Bytes
-			}
-			requests.put(
-				ceph_mgr_url + "/api/block/image/" + self.get_path().replace("/", "%2F"),
-				json=json.dumps(resizejson),
-				headers=headers,
-				verify=False,
-			)
+			self.ceph.resize(self.size)
