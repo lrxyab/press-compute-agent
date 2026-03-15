@@ -169,7 +169,7 @@ class VirtualMachine(Document):
 		self.setup_public_ip_address()
 
 	@frappe.whitelist()
-	def stop(self):
+	def stop(self, force=False):
 		if self.domain:
 			state, _ = self.domain.state()
 		else:
@@ -179,12 +179,10 @@ class VirtualMachine(Document):
 			case "Undefined":
 				self.domain = libvirt_connection().defineXMLFlags(self.xml.toxml())
 			case "Running":
-				with filelock(self.reboot_lock_key):
+				if force:
+					self.domain.destroy()
+				else:
 					self.domain.shutdown()
-					while True:
-						if not self.domain.isActive():
-							break
-		self.save()
 
 	@frappe.whitelist()
 	def pause(self):
