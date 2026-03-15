@@ -45,9 +45,15 @@ class VirtualMachineImage(Document):
 	def _take_image(self):
 		image_path = Path(CONFIG_PATH, "images", f"{uuid4()}.qcow2")
 		virtual_machine = frappe.get_doc("Virtual Machine", self.virtual_machine)
-		backup = VMBackup(virtual_machine.domain)
-		backup.backup_disk("vda", str(image_path.absolute()))
-		backup.begin()
+		if self.status == "Running":
+			backup = VMBackup(virtual_machine.domain)
+			backup.backup_disk("vda", str(image_path.absolute()))
+			backup.begin()
+		else:
+			import shutil
+
+			source_image_path = virtual_machine.get_image_path()
+			shutil.copy(source_image_path, image_path)
 		self.file_path = str(image_path.absolute())
 		self.status = "Available"
 
