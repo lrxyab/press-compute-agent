@@ -2,6 +2,6 @@ import frappe
 
 
 @frappe.whitelist(methods=["POST"])
-def stop(instance_id: str):
+def stop(instance_id: str, force=False):
 	virtual_machine_doc = frappe.get_doc("Virtual Machine", {"uuid": instance_id})
-	virtual_machine_doc.stop()
+	virtual_machine_doc.stop(force)
