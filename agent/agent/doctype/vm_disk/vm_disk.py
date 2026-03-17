@@ -1,7 +1,7 @@
 # Copyright (c) 2025, ayush@frappe.io and contributors
 # For license information, please see license.txt
 
-# import frappe
+import frappe
 from frappe.model.document import Document
 
 
@@ -21,4 +21,6 @@ class VMDisk(Document):
 		parenttype: DF.Data
 	# end: auto-generated types
 
-	pass
+	@property
+	def size(self):
+		return frappe.db.get_value("Disk", self.disk, "size")

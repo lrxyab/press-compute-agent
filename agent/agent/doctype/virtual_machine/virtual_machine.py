@@ -52,6 +52,7 @@ class VirtualMachine(Document):
 
 		cloud_init: DF.Code | None
 		disks: DF.Table[VMDisk]
+		has_private_ip: DF.Check
 		memory: DF.Int
 		network_interfaces: DF.Table[NetworkInterface]
 		number_of_vcpus: DF.Int
@@ -104,20 +105,20 @@ class VirtualMachine(Document):
 		if self.polled:
 			return
 
-		# sunsetting this since there is a forced creation of root disk
-		# self.validate_root_device_exists()
-
 	def on_change(self):
 		if self.polled:
 			return
-		doc_before_save = self.get_doc_before_save()
-
-		# check for state change
-		# if doc_before_save.memory != self.memory or doc_before_save.number_of_vcpus != self.number_of_vcpus or doc_before_save.disks != self.disks:
-		if not doc_before_save:
-			return
 		self.apply_config()
 
+		# The code after this will only run on subsequent changes and not on insert
+		doc_before_save = self.get_doc_before_save()
+		if not doc_before_save:
+			return
+		self.configure_disks()
+		self.configure_private_network_interface()
+
+	def configure_disks(self):
+		doc_before_save = self.get_doc_before_save()
 		# hacky way to declaratively apply disks
 		prev_disks = set([(disk.disk, disk.device) for disk in doc_before_save.disks])
 		new_disks = set([(disk.disk, disk.device) for disk in self.disks])
@@ -130,6 +131,10 @@ class VirtualMachine(Document):
 				disk_doc = frappe.get_doc("Disk", disk[0])
 				path = disk_doc.file_path
 				self.attach_disk(path, disk[1])
+
+	def configure_private_network_interface(self):
+		if self.has_value_changed("has_private_ip"):
+			self.refresh_private_network_interface()
 
 	def on_trash(self):
 		self.undefine()
@@ -169,7 +174,7 @@ class VirtualMachine(Document):
 		self.setup_public_ip_address()
 
 	@frappe.whitelist()
-	def stop(self):
+	def stop(self, force=False):
 		if self.domain:
 			state, _ = self.domain.state()
 		else:
@@ -179,12 +184,10 @@ class VirtualMachine(Document):
 			case "Undefined":
 				self.domain = libvirt_connection().defineXMLFlags(self.xml.toxml())
 			case "Running":
-				with filelock(self.reboot_lock_key):
+				if force:
+					self.domain.destroy()
+				else:
 					self.domain.shutdown()
-					while True:
-						if not self.domain.isActive():
-							break
-		self.save()
 
 	@frappe.whitelist()
 	def pause(self):
@@ -393,6 +396,12 @@ class VirtualMachine(Document):
 				frappe.throw("Bridge not set in Compute Settings")
 
 			self.append_network_interface_to_config("Bridge", bridge, mac_address=self.public_mac_address)
+		if self.has_private_ip:
+			# Hardcoding bridge name right now. Safe to assume br-int is the
+			# default bridge name for OVN on most installations.
+			self.append_network_interface_to_config(
+				"Bridge", "br-int", mac_address=self.private_mac_address, interface_id=str(self.port_uuid)
+			)
 
 	def setup_public_ip_address(self):
 		if not self.public_ip_address:
@@ -418,52 +427,79 @@ class VirtualMachine(Document):
 		return None
 
 	def append_network_interface_to_config(
-		self, type: Literal["Network", "Bridge", "Direct"], name: str, mac_address: str | None = None
+		self,
+		type: Literal["Network", "Bridge", "Direct"],
+		name: str,
+		mac_address: str | None = None,
+		interface_id: str | None = None,
 	):
-		devices = self.xml.getElementsByTagName("devices")[0]
-		interface = self.xml.createElement("interface")
+		return self.generate_network_interface_xml(
+			type, name, mac_address=mac_address, interface_id=interface_id
+		)
+
+	def generate_network_interface_xml(
+		self,
+		type: Literal["Network", "Bridge", "Direct"],
+		name: str,
+		mac_address: str | None = None,
+		interface_id: str | None = None,
+		device_xml_only=False,
+	):
+		if not device_xml_only:
+			devices = self.xml.getElementsByTagName("devices")[0]
+			parent_xml = self.xml
+		else:
+			parent_xml = minidom.Document()
+			devices = parent_xml
+
+		interface = parent_xml.createElement("interface")
 		match type:
 			case "Network":
 				interface.setAttribute("type", "network")
 
-				source = self.xml.createElement("source")
+				source = parent_xml.createElement("source")
 				source.setAttribute("network", name)
 				interface.appendChild(source)
 
-				model = self.xml.createElement("model")
+				model = parent_xml.createElement("model")
 				model.setAttribute("type", "virtio")
 				interface.appendChild(model)
 			case "Bridge":
 				interface.setAttribute("type", "bridge")
 
-				source = self.xml.createElement("source")
+				source = parent_xml.createElement("source")
 				source.setAttribute("bridge", name)
 				interface.appendChild(source)
 
-				vport = self.xml.createElement("virtualport")
-				vport.setAttribute("type", "openvswitch")
-				interface.appendChild(vport)
+				virtualport = parent_xml.createElement("virtualport")
+				virtualport.setAttribute("type", "openvswitch")
+				if interface_id:
+					parameters = parent_xml.createElement("parameters")
+					parameters.setAttribute("interfaceid", interface_id)
+					virtualport.appendChild(parameters)
+				interface.appendChild(virtualport)
 
-				model = self.xml.createElement("model")
+				model = parent_xml.createElement("model")
 				model.setAttribute("type", "virtio")
 				interface.appendChild(model)
 			case "Direct":
 				interface.setAttribute("type", "direct")
 
-				source = self.xml.createElement("source")
+				source = parent_xml.createElement("source")
 				source.setAttribute("dev", name)
 				source.setAttribute("mode", "bridge")
 				interface.appendChild(source)
 
-				model = self.xml.createElement("model")
+				model = parent_xml.createElement("model")
 				model.setAttribute("type", "e1000")
 				interface.appendChild(model)
 
 		if mac_address:
-			mac = self.xml.createElement("mac")
+			mac = parent_xml.createElement("mac")
 			mac.setAttribute("address", mac_address)
 			interface.appendChild(mac)
 		devices.appendChild(interface)
+		return parent_xml
 
 	def attach_disk(self, disk: str, dev: str):
 		from xml.dom import minidom
@@ -595,7 +631,12 @@ class VirtualMachine(Document):
 		gateway = frappe.db.get_single_value("Compute Settings", "public_ip_address")
 		network_config = frappe.render_template(
 			"agent/agent/doctype/virtual_machine/network-config.jinja2",
-			context={"ip_address": self.public_ip_address, "gateway": gateway},
+			context={
+				"ip_address": self.public_ip_address,
+				"public_mac_address": self.public_mac_address,
+				"gateway": gateway,
+				"private_mac_address": self.private_mac_address,
+			},
 			is_path=True,
 		)
 
@@ -626,6 +667,33 @@ class VirtualMachine(Document):
 				frappe.throw(f"{e}")
 			finally:
 				shutil.rmtree(temp_path)
+
+	def refresh_private_network_interface(self):
+		# Detaching and reattaching forces netplan to be loaded
+		interface_config = self.generate_network_interface_xml(
+			"Bridge",
+			"br-int",
+			self.private_mac_address,
+			interface_id=str(self.port_uuid),
+			device_xml_only=True,
+		)
+		interface_config = interface_config.toxml()
+		if self.domain:
+			try:
+				self.domain.detachDeviceFlags(
+					interface_config, libvirt.VIR_DOMAIN_AFFECT_LIVE | libvirt.VIR_DOMAIN_AFFECT_CONFIG
+				)
+			except Exception as e:
+				# If it's not attached in the first place, continue.
+				if e.get_error_code() == libvirt.VIR_ERR_DEVICE_MISSING:
+					pass
+				else:
+					raise e
+
+			if self.has_private_ip:
+				self.domain.attachDeviceFlags(
+					interface_config, libvirt.VIR_DOMAIN_AFFECT_LIVE | libvirt.VIR_DOMAIN_AFFECT_CONFIG
+				)
 
 	@property
 	def reboot_lock_key(self):
@@ -756,11 +824,10 @@ def _new_vm_from_image(
 	memory,
 	number_of_vcpus,
 	public_ip_address,
-	private_ip_address=None,
-	private_network=None,
 	ssh_key=None,
 	cloud_init=None,
 	root_disk_size=None,
+	has_private_ip=False,
 	uuid=None,
 ):
 	provision_vmi_from_orchestrator(image)
@@ -776,23 +843,11 @@ def _new_vm_from_image(
 	vm.machine_type = machine_type
 	vm.memory = memory
 	vm.number_of_vcpus = number_of_vcpus
+	vm.has_private_ip = has_private_ip
 
 	# vm.agent = agent.name
 
 	vm.insert()
-
-	if private_network:
-		private_network_doc = frappe.get_doc("Private Network", private_network)
-		private_network_doc.append(
-			"virtual_machines",
-			{"virtual_machine": vm.name, "ip_address": private_ip_address},
-		)
-		private_network_doc.save()
-
-	vm.load_from_db()
-
-	# vm.load_from_db()
-	vm.save()
 	vm.start()
 
 	# this will be the instance_id to track the VM state
@@ -807,11 +862,10 @@ def new_vm_from_image(
 	memory: int,
 	number_of_vcpus: int,
 	public_ip_address: str,
-	private_ip_address: str | None = None,
-	private_network: str | None = None,
 	ssh_key: str | None = None,
 	cloud_init: str | None = None,
 	root_disk_size: int | None = None,
+	has_private_ip: bool = False,
 ):
 	# TODO: after profiling, it seems that disk creation takes the most time
 	# safely enqueue it in such a way it doesn't affect functionality
@@ -828,46 +882,14 @@ def new_vm_from_image(
 		memory=memory,
 		number_of_vcpus=number_of_vcpus,
 		public_ip_address=public_ip_address,
-		private_ip_address=private_ip_address,
-		private_network=private_network,
 		ssh_key=ssh_key,
 		cloud_init=cloud_init,
 		root_disk_size=root_disk_size,
+		has_private_ip=has_private_ip,
 		uuid=instance_id,
 		enqueue_after_commit=True,
 	)
 	return instance_id
-
-
-@frappe.whitelist(methods=["GET"])
-def get_vm_details_from_instance_id(instance_id):
-	vm_doc = frappe.get_doc("Virtual Machine", {"uuid": instance_id})
-	vm_dict = vm_doc.as_dict()
-
-	# private ip addresses
-	vm_dict["private_ip_addresses"] = frappe.get_all(
-		"Private Network Machines", {"virtual_machine": vm_doc.name}, pluck="ip_address"
-	)
-	new_disks = []
-
-	for disk in vm_dict["disks"]:
-		name = disk["name"]
-		size = frappe.get_value("Disk", name, "size")
-		disk["size"] = size
-		new_disks.append(disk)
-
-	vm_dict["disks"] = new_disks
-	return vm_dict
-
-
-@frappe.whitelist()
-def terminate(name):
-	vmi_doc = frappe.qb.DocType("Virtual Machine Image")
-	query = frappe.qb.update(vmi_doc).where(vmi_doc.virtual_machine == name).set("virtual_machine", None)
-	query.run()
-
-	vm_doc = frappe.get_doc("Virtual Machine", name)
-	vm_doc.delete()
 
 
 def provision_vmi_from_orchestrator(image: str):

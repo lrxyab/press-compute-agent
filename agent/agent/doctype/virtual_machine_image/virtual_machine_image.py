@@ -25,6 +25,7 @@ class VirtualMachineImage(Document):
 		file_path: DF.Data | None
 		is_from_vm: DF.Check
 		osinfo: DF.Data | None
+		sha256sum: DF.Data | None
 		size: DF.Data | None
 		status: DF.Literal["Draft", "Pending", "Ongoing", "Available"]
 		storage_medium: DF.Literal["File", "CEPH"]
@@ -50,9 +51,15 @@ class VirtualMachineImage(Document):
 	def _take_image(self):
 		image_path = Path(CONFIG_PATH, "images", f"{uuid4()}.qcow2")
 		virtual_machine = frappe.get_doc("Virtual Machine", self.virtual_machine)
-		backup = VMBackup(virtual_machine.domain)
-		backup.backup_disk("vda", str(image_path.absolute()))
-		backup.begin()
+		if self.status == "Running":
+			backup = VMBackup(virtual_machine.domain)
+			backup.backup_disk("vda", str(image_path.absolute()))
+			backup.begin()
+		else:
+			import shutil
+
+			source_image_path = virtual_machine.get_image_path()
+			shutil.copy(source_image_path, image_path)
 		self.file_path = str(image_path.absolute())
 		self.status = "Available"
 
@@ -62,24 +69,8 @@ class VirtualMachineImage(Document):
 				self.size = frappe.db.get_value("Disk", root_disk_name, "size")
 				break
 
+		self.sha256sum = get_sha256sum_of_file(self.file_path)
 		self.save()
-
-
-@frappe.whitelist()
-def create_image(instance_id):
-	if self.storage_medium == "File":
-		virtual_machine = frappe.db.get_value("Virtual Machine", {"uuid": instance_id})
-		virtual_machine_image_doc = frappe.new_doc("Virtual Machine Image")
-		virtual_machine_image_doc.name = f"{virtual_machine}-image-{frappe.utils.random_string(5)}"
-		virtual_machine_image_doc.virtual_machine = virtual_machine
-		virtual_machine_image_doc.is_from_vm = True
-		virtual_machine_image_doc.status = "Ongoing"
-
-		virtual_machine_image_doc.save()
-
-		frappe.enqueue_doc("Virtual Machine Image", virtual_machine_image_doc.name, "_take_image")
-		return virtual_machine_image_doc.name
-	return "not implemented"
 
 
 # used by the agent downloading the vmi
@@ -110,3 +101,11 @@ def download_vmi(token: str):
 			file_path, environ=frappe.request.environ, conditional=True, download_name=f"{name}.qcow2"
 		)
 	return "not implemented"
+
+
+def get_sha256sum_of_file(file_path: str):
+	with open(file_path, "rb") as file:
+		import hashlib
+
+		digest = hashlib.file_digest(file, "sha256")
+		return digest.hexdigest()
