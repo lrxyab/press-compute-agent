@@ -17,7 +17,6 @@ import libvirt
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils.caching import redis_cache
-from frappe.utils.synchronization import filelock
 
 from agent.agent.doctype.virtual_machine_image.virtual_machine_image import get_vmi_download_token
 from agent.configuration.configs import XML_CONFIG
@@ -204,42 +203,9 @@ class VirtualMachine(Document):
 			self.domain.undefine()
 		self.domain = None
 
-	def _shutdown(self, reboot=False):
-		with filelock(self.reboot_lock_key):
-			try:
-				import time
-
-				if self.domain.isActive():
-					self.domain.shutdown()
-				destroyed = False
-				while True:
-					time.sleep(0.1)
-					if not self.domain.isActive():
-						destroyed = True
-						break
-				if not destroyed:
-					frappe.throw("Virtual Machine could not be shut down.")
-			except Exception:
-				raise ShutdownFailedException from None
-
-			if not reboot:
-				self.save()
-
-	@frappe.whitelist()
-	def shutdown(self):
-		frappe.enqueue_doc("Virtual Machine", self.name, "_shutdown")
-
-	def _reboot(self):
-		with filelock(self.reboot_lock_key):
-			try:
-				self._shutdown(reboot=True)
-				self.domain.create()
-			except Exception:
-				raise RebootFailedException from None
-
 	@frappe.whitelist()
 	def reboot(self):
-		frappe.enqueue_doc("Virtual Machine", self.name, "_reboot")
+		self.domain.reboot()
 
 	def apply_config(self, define=False):
 		self.xml = get_new_config()
