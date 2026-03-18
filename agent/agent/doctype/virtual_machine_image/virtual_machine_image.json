@@ -74,6 +74,8 @@
    "fieldname": "osinfo",
    "fieldtype": "Data",
    "label": "OSInfo"
+  },
+  {
    "fieldname": "sha256sum",
    "fieldtype": "Data",
    "label": "SHA256Sum"
