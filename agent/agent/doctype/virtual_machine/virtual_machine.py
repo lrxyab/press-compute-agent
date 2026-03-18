@@ -270,7 +270,7 @@ class VirtualMachine(Document):
 
 		# set osinfo
 		osinfo = frappe.get_value("Virtual Machine Image", self.virtual_machine_image, "osinfo")
-		os_element = doc.getElementsByTagName("libosinfo:os")[0]
+		os_element = self.xml.getElementsByTagName("libosinfo:os")[0]
 		os_element.setAttribute("id", osinfo)
 
 		# set current memory

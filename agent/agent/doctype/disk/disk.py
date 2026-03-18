@@ -40,15 +40,10 @@ class Disk(Document):
 		super().__init__(*args, **kwargs)
 		if not self.uuid:
 			self.uuid = str(uuid4())
-		file_path = self.get_path()
-		self.file_path = file_path
-		self.ceph = Ceph(
-			file_path,
-			get_decrypted_password("Compute Settings", "Compute Settings", "ceph_api_key"),
-			get_decrypted_password("Compute Settings", "Compute Settings", "ceph_mgr_password"),
-		)
 
 	def before_insert(self):
+		file_path = self.get_path()
+		self.file_path = file_path
 		if self.is_snapshot:
 			return
 		if self.is_primary_disk:
@@ -56,6 +51,14 @@ class Disk(Document):
 			self.set_disk_size()
 		else:
 			self.create_disk()
+
+	@property
+	def ceph(self):
+		return Ceph(
+			self.get_path(),
+			get_decrypted_password("Compute Settings", "Compute Settings", "ceph_api_key"),
+			get_decrypted_password("Compute Settings", "Compute Settings", "ceph_mgr_password"),
+		)
 
 	def get_path(self):
 		if self.storage_medium == "File":
