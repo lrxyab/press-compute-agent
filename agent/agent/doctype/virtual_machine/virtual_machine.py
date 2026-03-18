@@ -268,6 +268,11 @@ class VirtualMachine(Document):
 		name_element = self.xml.getElementsByTagName("name")[0]
 		name_element.firstChild.nodeValue = self.name
 
+		# set osinfo
+		osinfo = frappe.get_value("Virtual Machine Image", self.virtual_machine_image, "osinfo")
+		os_element = doc.getElementsByTagName("libosinfo:os")[0]
+		os_element.setAttribute("id", osinfo)
+
 		# set current memory
 		currentMemory_element = self.xml.getElementsByTagName("currentMemory")[0]
 		currentMemory_element.firstChild.nodeValue = int(self.memory * 1024 * 1024)
