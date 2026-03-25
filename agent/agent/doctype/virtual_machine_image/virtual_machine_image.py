@@ -42,13 +42,13 @@ class VirtualMachineImage(Document):
 
 	@frappe.whitelist()
 	def take_image(self):
-		if self.storage_medium == "File":
-			frappe.enqueue_doc("Virtual Machine Image", self.name, "_take_image")
-		else:
-			print("not implemented")
-			return
+		match self.storage_medium:
+			case "File":
+				frappe.enqueue_doc("Virtual Machine Image", self.name, "_take_image_file")
+			case "Ceph":
+				frappe.enqueue_doc("Virtual Machine Image", self.name, "_take_image_ceph")
 
-	def _take_image(self):
+	def _take_image_file(self):
 		image_path = Path(CONFIG_PATH, "images", f"{uuid4()}.qcow2")
 		virtual_machine = frappe.get_doc("Virtual Machine", self.virtual_machine)
 		if self.status == "Running":
@@ -70,6 +70,33 @@ class VirtualMachineImage(Document):
 				break
 
 		self.sha256sum = get_sha256sum_of_file(self.file_path)
+		self.save()
+
+	def _take_image_ceph(self):
+		new_uuid = uuid4()
+		virtual_machine = frappe.get_doc("Virtual Machine", self.virtual_machine)
+		source_image_path = virtual_machine.get_image_path()
+		try:
+			if self.status == "Running":
+				virtual_machine.domain.suspend()
+			ceph = Ceph(
+				source_image_path,
+				get_decrypted_password("Compute Settings", "Compute Settings", "ceph_api_key"),
+				get_decrypted_password("Compute Settings", "Compute Settings", "ceph_mgr_password"),
+			)
+			ceph.copy_disk(new_uuid)
+		finally:
+			if self.status == "Running":
+				virtual_machine.domain.resume()
+		self.file_path = frappe.db.get_single_value("Compute Settings", "def_rbd_pool") + "/" + new_uuid
+		self.status = "Available"
+
+		for disk in virtual_machine.disks:
+			if disk.device == "vda":
+				root_disk_name = disk.disk
+				self.size = frappe.db.get_value("Disk", root_disk_name, "size")
+				break
+		# no sha256sum, ceph doesnt work with that
 		self.save()
 
 
@@ -96,7 +123,7 @@ def download_vmi(token: str):
 	if not file_path:
 		frappe.response.http_status_code = 404
 		return "No filepath for the virtual machine image"
-	if medium == "file":
+	if medium == "File":
 		return send_file(
 			file_path, environ=frappe.request.environ, conditional=True, download_name=f"{name}.qcow2"
 		)

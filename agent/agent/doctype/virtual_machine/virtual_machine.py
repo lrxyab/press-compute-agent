@@ -342,8 +342,8 @@ class VirtualMachine(Document):
 		driver.setAttribute("name", "qemu")
 		driver.setAttribute("type", driver_type)
 		if disk_type == "Ceph":
+			# Ceph Cache is managed outside of libvirt by RBD
 			driver.setAttribute("cache", "none")
-			driver.setAttribute("io", "native")
 		disk_elem.appendChild(driver)
 
 		if disk_type == "Ceph":

@@ -70,7 +70,6 @@ class Ceph:
 			"name": self.image_spec.split("/")[1],
 			"size": size * 1024 * 1024 * 1024,  # GiB -> Bytes
 		}
-		# %2F is encoding for the / character
 		a = requests.post(
 			self.ceph_mgr_url + "/api/block/image",
 			json=json.dumps(createjson),
@@ -86,7 +85,6 @@ class Ceph:
 			"dest_image_name": self.image_spec.split("/")[1],
 			"dest_namespace": "",  # we dont use namespaces but its a required param
 		}
-		# %2F is encoding for the / character
 		a = requests.post(
 			self.ceph_mgr_url + "/api/block/image/" + parse.quote_plus(image) + "/copy",
 			json=json.dumps(copyjson),
@@ -96,6 +94,22 @@ class Ceph:
 		if a.status_code < 200 or a.status_code >= 300:
 			frappe.throw(a.text)
 		self.resize(size)
+
+	def copy_disk(self, dest_uuid):
+		copyjson = {
+			"data_pool": self.image_spec.split("/")[0],
+			"dest_image_name": uuid,
+			"dest_namespace": "",
+			"dest_pool_name": self.image_spec.split("/")[0],
+		}
+		a = requests.post(
+			self.ceph_mgr_url + "/api/block/image/" + parse.quote_plus(self.image_spec) + "/copy",
+			json=json.dumps(copyjson),
+			headers=self.headers,
+			verify=False,
+		)
+		if a.status_code < 200 or a.status_code >= 300:
+			frappe.throw(a.text)
 
 	def delete_disk(self):
 		a = requests.delete(
