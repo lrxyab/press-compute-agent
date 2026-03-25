@@ -31,7 +31,7 @@ class Disk(Document):
 		is_primary_disk: DF.Check
 		is_snapshot: DF.Check
 		size: DF.Float
-		storage_medium: DF.Literal["File", "CEPH"]
+		storage_medium: DF.Literal["File", "Ceph"]
 		uuid: DF.Data | None
 		virtual_machine_image: DF.Link | None
 	# end: auto-generated types
@@ -73,8 +73,8 @@ class Disk(Document):
 			"Virtual Machine Image", self.virtual_machine_image, "storage_medium"
 		)
 
-		if storage_medium == "CEPH":
-			if self.storage_medium == "CEPH":
+		if storage_medium == "Ceph":
+			if self.storage_medium == "Ceph":
 				self.ceph.create_disk_from_image(base_image_path, self.size)
 			else:
 				frappe.throw(
@@ -96,7 +96,7 @@ class Disk(Document):
 
 	def create_disk(self):
 		# TODO: find a way to do this without subprocess calls
-		if self.storage_medium == "CEPH":
+		if self.storage_medium == "Ceph":
 			self.ceph.create_disk(self.size)
 		else:
 			try:
@@ -105,7 +105,7 @@ class Disk(Document):
 				frappe.throw(_("Failed to create disk: {}").format(e))
 
 	def after_delete(self):
-		if self.storage_medium == "CEPH":
+		if self.storage_medium == "Ceph":
 			self.ceph.delete_disk()
 		else:
 			try:

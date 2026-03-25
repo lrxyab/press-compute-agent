@@ -67,7 +67,7 @@
    "fieldname": "storage_medium",
    "fieldtype": "Select",
    "label": "Storage Medium",
-   "options": "File\nCEPH"
+   "options": "File\nCeph"
   },
   {
    "default": "unknown",
@@ -84,7 +84,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-16 00:28:04.676586",
+ "modified": "2026-03-25 13:32:21.423535",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine Image",

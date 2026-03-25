@@ -28,7 +28,7 @@ class VirtualMachineImage(Document):
 		sha256sum: DF.Data | None
 		size: DF.Data | None
 		status: DF.Literal["Draft", "Pending", "Ongoing", "Available"]
-		storage_medium: DF.Literal["File", "CEPH"]
+		storage_medium: DF.Literal["File", "Ceph"]
 		virtual_machine: DF.Link | None
 	# end: auto-generated types
 

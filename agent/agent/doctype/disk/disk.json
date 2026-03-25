@@ -71,13 +71,13 @@
    "fieldname": "storage_medium",
    "fieldtype": "Select",
    "label": "Storage Medium",
-   "options": "File\nCEPH"
+   "options": "File\nCeph"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-14 20:07:42.030906",
+ "modified": "2026-03-25 13:32:51.147061",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Disk",

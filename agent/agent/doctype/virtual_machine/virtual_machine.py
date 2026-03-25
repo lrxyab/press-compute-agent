@@ -292,7 +292,7 @@ class VirtualMachine(Document):
 		for disk in self.disks:
 			disk_doc = frappe.get_doc("Disk", disk.disk)
 			file_path = disk_doc.get_path()
-			disk_type = (disk_doc.storage_medium == "CEPH" and "CEPH") or "Volume"
+			disk_type = (disk_doc.storage_medium == "Ceph" and "Ceph") or "Volume"
 			backing_chain = []
 			if disk_doc.is_snapshot:
 				current_disk_doc = disk_doc
@@ -323,16 +323,16 @@ class VirtualMachine(Document):
 		self,
 		file_path: str,
 		dev: str,
-		disk_type: Literal["Volume", "Seed", "CEPH"],
+		disk_type: Literal["Volume", "Seed", "Ceph"],
 		parent_xml,
 		backing_chain=None,
 	):
 		if not backing_chain:
 			backing_chain = []
-		disk_type_attr = {"CEPH": "network", "Volume": "file", "Seed": "file"}[disk_type]
-		disk_device = {"CEPH": "disk", "Volume": "disk", "Seed": "cdrom"}[disk_type]
-		driver_type = {"CEPH": "raw", "Volume": "qcow2", "Seed": "raw"}[disk_type]
-		target_bus = {"CEPH": "virtio", "Volume": "virtio", "Seed": "sata"}[disk_type]
+		disk_type_attr = {"Ceph": "network", "Volume": "file", "Seed": "file"}[disk_type]
+		disk_device = {"Ceph": "disk", "Volume": "disk", "Seed": "cdrom"}[disk_type]
+		driver_type = {"Ceph": "raw", "Volume": "qcow2", "Seed": "raw"}[disk_type]
+		target_bus = {"Ceph": "virtio", "Volume": "virtio", "Seed": "sata"}[disk_type]
 
 		disk_elem = parent_xml.createElement("disk")
 		disk_elem.setAttribute("type", disk_type_attr)
@@ -341,12 +341,12 @@ class VirtualMachine(Document):
 		driver = parent_xml.createElement("driver")
 		driver.setAttribute("name", "qemu")
 		driver.setAttribute("type", driver_type)
-		if disk_type == "CEPH":
+		if disk_type == "Ceph":
 			driver.setAttribute("cache", "none")
 			driver.setAttribute("io", "native")
 		disk_elem.appendChild(driver)
 
-		if disk_type == "CEPH":
+		if disk_type == "Ceph":
 			auth = parent_xml.createElement("auth")
 			auth.setAttribute("username", "libvirt")
 			secret = parent_xml.createElement("secret")
@@ -358,7 +358,7 @@ class VirtualMachine(Document):
 			disk_elem.appendChild(auth)
 
 		source = parent_xml.createElement("source")
-		if disk_type == "CEPH":
+		if disk_type == "Ceph":
 			source.setAttribute("protocol", "rbd")
 			source.setAttribute("name", file_path)
 			mons = json.loads(frappe.db.get_single_value("Compute Settings", "monitor"))
@@ -510,7 +510,7 @@ class VirtualMachine(Document):
 		from xml.dom import minidom
 
 		disk_type = (
-			frappe.get_value("Disk", {"file_path": disk}, "storage_medium") == "CEPH" and "CEPH"
+			frappe.get_value("Disk", {"file_path": disk}, "storage_medium") == "Ceph" and "Ceph"
 		) or "Volume"
 		xml = self.create_disk_config(disk, dev, disk_type, minidom.Document())
 		self.domain.attachDeviceFlags(xml.toxml(), libvirt.VIR_DOMAIN_AFFECT_LIVE)

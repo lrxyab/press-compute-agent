@@ -76,7 +76,7 @@
    "default": "replaceme",
    "fieldname": "ceph_api_key",
    "fieldtype": "Password",
-   "label": "CEPH API Key (autoset)"
+   "label": "Ceph API Key (autoset)"
   },
   {
    "fieldname": "def_rbd_pool",
@@ -91,24 +91,24 @@
   {
    "fieldname": "ceph_mgr_url",
    "fieldtype": "Data",
-   "label": "CEPH Mgr URL"
+   "label": "Ceph Mgr URL"
   },
   {
    "fieldname": "ceph_mgr_username",
    "fieldtype": "Data",
-   "label": "CEPH MGR Username"
+   "label": "Ceph MGR Username"
   },
   {
    "fieldname": "ceph_mgr_password",
    "fieldtype": "Password",
-   "label": "CEPH MGR Password"
+   "label": "Ceph MGR Password"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-15 17:12:07.507601",
+ "modified": "2026-03-25 13:33:18.437650",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Compute Settings",
