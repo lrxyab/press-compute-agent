@@ -61,9 +61,11 @@ class Disk(Document):
 		)
 
 	def get_path(self):
-		if self.storage_medium == "File":
-			return os.path.join(DISKS_ROOT, self.uuid + ".qcow2")
-		return frappe.db.get_single_value("Compute Settings", "def_rbd_pool") + "/" + self.uuid
+		match self.storage_medium:
+			case "Ceph":
+				return frappe.db.get_single_value("Compute Settings", "def_rbd_pool") + "/" + self.uuid
+			case "File":
+				return os.path.join(DISKS_ROOT, self.uuid + ".qcow2")
 
 	def create_system_image(self):
 		base_image_path = frappe.db.get_value(
@@ -73,20 +75,14 @@ class Disk(Document):
 			"Virtual Machine Image", self.virtual_machine_image, "storage_medium"
 		)
 
-		if storage_medium == "Ceph":
-			if self.storage_medium == "Ceph":
-				self.ceph.create_disk_from_image(base_image_path, self.size)
-			else:
-				frappe.throw(
-					_("Failed to create disk: Virtual Machine Image and Disk Mediums dont match").format()
-				)
+		if storage_medium == self.storage_medium == "Ceph":
+			self.ceph.create_disk_from_image(base_image_path, self.size)
+		elif storage_medium == self.storage_medium == "File":
+			shutil.copy(base_image_path, self.file_path)
 		else:
-			if self.storage_medium == "File":
-				shutil.copy(base_image_path, self.file_path)
-			else:
-				frappe.throw(
-					_("Failed to create disk: Virtual Machine Image and Disk Mediums dont match").format()
-				)
+			frappe.throw(
+				_("Failed to create disk: Virtual Machine Image and Disk Mediums dont match").format()
+			)
 
 	def on_change(self):
 		if self.is_snapshot:
@@ -96,25 +92,28 @@ class Disk(Document):
 
 	def create_disk(self):
 		# TODO: find a way to do this without subprocess calls
-		if self.storage_medium == "Ceph":
-			self.ceph.create_disk(self.size)
-		else:
-			try:
-				subprocess.call(["qemu-img", "create", "-f", "qcow2", self.get_path(), f"{self.size}G"])
-			except Exception as e:
-				frappe.throw(_("Failed to create disk: {}").format(e))
+		match self.storage_medium:
+			case "Ceph":
+				self.ceph.create_disk(self.size)
+			case "File":
+				try:
+					subprocess.call(["qemu-img", "create", "-f", "qcow2", self.get_path(), f"{self.size}G"])
+				except Exception as e:
+					frappe.throw(_("Failed to create disk: {}").format(e))
 
 	def after_delete(self):
-		if self.storage_medium == "Ceph":
-			self.ceph.delete_disk()
-		else:
-			try:
-				os.remove(self.file_path)
-			except FileNotFoundError:
-				return
+		match self.storage_medium:
+			case "Ceph":
+				self.ceph.delete_disk()
+			case "File":
+				try:
+					os.remove(self.file_path)
+				except FileNotFoundError:
+					return
 
 	def set_disk_size(self):
-		if self.storage_medium == "File":
-			subprocess.call(["qemu-img", "resize", "-f", "qcow2", self.get_path(), f"{self.size}G"])
-		else:
-			self.ceph.resize(self.size)
+		match self.storage_medium:
+			case "File":
+				subprocess.call(["qemu-img", "resize", "-f", "qcow2", self.get_path(), f"{self.size}G"])
+			case "Ceph":
+				self.ceph.resize(self.size)

@@ -367,7 +367,7 @@ class VirtualMachine(Document):
 				host.setAttribute("name", mon["host"])
 				host.setAttribute("port", mon["port"])
 				source.appendChild(host)
-		else:
+		elif disk_type == "Seed" or disk_type == "Volume":
 			source.setAttribute("file", file_path)
 		disk_elem.appendChild(source)
 
