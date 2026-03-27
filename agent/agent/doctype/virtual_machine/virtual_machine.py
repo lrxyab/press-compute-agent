@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import uuid
 from pathlib import Path
 from typing import Literal
@@ -206,6 +207,15 @@ class VirtualMachine(Document):
 	@frappe.whitelist()
 	def reboot(self):
 		self.domain.reboot()
+
+	def _restart(self):
+		self.stop()
+		time.sleep(0.3)
+		while True:
+			if self.state != "Running":
+				break
+			time.sleep(0.3)
+		self.start()
 
 	def apply_config(self, define=False):
 		self.xml = get_new_config()
