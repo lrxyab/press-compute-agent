@@ -77,7 +77,12 @@ class Ceph:
 			verify=False,
 		)
 		if a.status_code < 200 or a.status_code >= 300:
-			frappe.throw(a.text)
+			try:
+				data = json.loads(a.text)
+			except Exception:
+				frappe.throw(a.text)
+			if data["code"] != "17":
+				frappe.throw(a.text)
 
 	def create_disk_from_image(self, image, size):
 		copyjson = {
@@ -92,7 +97,12 @@ class Ceph:
 			verify=False,
 		)
 		if a.status_code < 200 or a.status_code >= 300:
-			frappe.throw(a.text)
+			try:
+				data = json.loads(a.text)
+			except Exception:
+				frappe.throw(a.text)
+			if data["code"] != "17":
+				frappe.throw(a.text)
 		self.resize(size)
 
 	def copy_disk(self, dest_uuid):
@@ -109,7 +119,12 @@ class Ceph:
 			verify=False,
 		)
 		if a.status_code < 200 or a.status_code >= 300:
-			frappe.throw(a.text)
+			try:
+				data = json.loads(a.text)
+			except Exception:
+				frappe.throw(a.text)
+			if data["code"] != "17":
+				frappe.throw(a.text)
 
 	def delete_disk(self):
 		a = requests.delete(
