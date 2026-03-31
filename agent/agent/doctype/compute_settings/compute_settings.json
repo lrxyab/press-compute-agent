@@ -12,7 +12,14 @@
   "orchestrator_base_url",
   "orchestrator_api_key",
   "orchestrator_api_secret",
-  "ovs_bridge"
+  "ovs_bridge",
+  "libvirt_rbd_secret",
+  "ceph_api_key",
+  "def_rbd_pool",
+  "monitor",
+  "ceph_mgr_url",
+  "ceph_mgr_username",
+  "ceph_mgr_password"
  ],
  "fields": [
   {
@@ -59,13 +66,49 @@
    "fieldname": "public_ip_address",
    "fieldtype": "Data",
    "label": "Public IP Address"
+  },
+  {
+   "fieldname": "libvirt_rbd_secret",
+   "fieldtype": "Password",
+   "label": "Libvirt RBD Secret"
+  },
+  {
+   "default": "replaceme",
+   "fieldname": "ceph_api_key",
+   "fieldtype": "Password",
+   "label": "Ceph API Key (autoset)"
+  },
+  {
+   "fieldname": "def_rbd_pool",
+   "fieldtype": "Data",
+   "label": "Default RBD Pool"
+  },
+  {
+   "fieldname": "monitor",
+   "fieldtype": "JSON",
+   "label": "Monitor "
+  },
+  {
+   "fieldname": "ceph_mgr_url",
+   "fieldtype": "Data",
+   "label": "Ceph Mgr URL"
+  },
+  {
+   "fieldname": "ceph_mgr_username",
+   "fieldtype": "Data",
+   "label": "Ceph MGR Username"
+  },
+  {
+   "fieldname": "ceph_mgr_password",
+   "fieldtype": "Password",
+   "label": "Ceph MGR Password"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-12 17:04:24.764848",
+ "modified": "2026-03-25 13:33:18.437650",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Compute Settings",

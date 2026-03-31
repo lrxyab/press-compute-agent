@@ -10,6 +10,8 @@
   "file_path",
   "virtual_machine",
   "status",
+  "storage_medium",
+  "osinfo",
   "sha256sum",
   "column_break_ltbd",
   "is_from_vm",
@@ -61,6 +63,19 @@
    "label": "Size"
   },
   {
+   "default": "File",
+   "fieldname": "storage_medium",
+   "fieldtype": "Select",
+   "label": "Storage Medium",
+   "options": "File\nCeph"
+  },
+  {
+   "default": "unknown",
+   "fieldname": "osinfo",
+   "fieldtype": "Data",
+   "label": "OSInfo"
+  },
+  {
    "fieldname": "sha256sum",
    "fieldtype": "Data",
    "label": "SHA256Sum"
@@ -69,7 +84,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-16 00:28:04.676586",
+ "modified": "2026-03-25 13:32:21.423535",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine Image",

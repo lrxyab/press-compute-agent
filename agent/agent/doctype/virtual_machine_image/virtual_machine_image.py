@@ -24,9 +24,11 @@ class VirtualMachineImage(Document):
 
 		file_path: DF.Data | None
 		is_from_vm: DF.Check
+		osinfo: DF.Data | None
 		sha256sum: DF.Data | None
 		size: DF.Data | None
 		status: DF.Literal["Draft", "Pending", "Ongoing", "Available"]
+		storage_medium: DF.Literal["File", "Ceph"]
 		virtual_machine: DF.Link | None
 	# end: auto-generated types
 
@@ -40,9 +42,13 @@ class VirtualMachineImage(Document):
 
 	@frappe.whitelist()
 	def take_image(self):
-		frappe.enqueue_doc("Virtual Machine Image", self.name, "_take_image")
+		match self.storage_medium:
+			case "File":
+				frappe.enqueue_doc("Virtual Machine Image", self.name, "_take_image_file")
+			case "Ceph":
+				frappe.enqueue_doc("Virtual Machine Image", self.name, "_take_image_ceph")
 
-	def _take_image(self):
+	def _take_image_file(self):
 		image_path = Path(CONFIG_PATH, "images", f"{uuid4()}.qcow2")
 		virtual_machine = frappe.get_doc("Virtual Machine", self.virtual_machine)
 		if self.status == "Running":
@@ -66,6 +72,33 @@ class VirtualMachineImage(Document):
 		self.sha256sum = get_sha256sum_of_file(self.file_path)
 		self.save()
 
+	def _take_image_ceph(self):
+		new_uuid = uuid4()
+		virtual_machine = frappe.get_doc("Virtual Machine", self.virtual_machine)
+		source_image_path = virtual_machine.get_image_path()
+		try:
+			if self.status == "Running":
+				virtual_machine.domain.suspend()
+			ceph = Ceph(
+				source_image_path,
+				get_decrypted_password("Compute Settings", "Compute Settings", "ceph_api_key"),
+				get_decrypted_password("Compute Settings", "Compute Settings", "ceph_mgr_password"),
+			)
+			ceph.copy_disk(new_uuid)
+		finally:
+			if self.status == "Running":
+				virtual_machine.domain.resume()
+		self.file_path = frappe.db.get_single_value("Compute Settings", "def_rbd_pool") + "/" + new_uuid
+		self.status = "Available"
+
+		for disk in virtual_machine.disks:
+			if disk.device == "vda":
+				root_disk_name = disk.disk
+				self.size = frappe.db.get_value("Disk", root_disk_name, "size")
+				break
+		# no sha256sum, ceph doesnt work with that
+		self.save()
+
 
 # used by the agent downloading the vmi
 def get_vmi_download_token(name: str):
@@ -86,12 +119,15 @@ def download_vmi(token: str):
 		return "No such virtual machine image"
 
 	file_path = frappe.db.get_value("Virtual Machine Image", name, "file_path")
+	medium = frappe.db.get_value("Virtual Machine Image", name, "storage_medium")
 	if not file_path:
 		frappe.response.http_status_code = 404
 		return "No filepath for the virtual machine image"
-	return send_file(
-		file_path, environ=frappe.request.environ, conditional=True, download_name=f"{name}.qcow2"
-	)
+	if medium == "File":
+		return send_file(
+			file_path, environ=frappe.request.environ, conditional=True, download_name=f"{name}.qcow2"
+		)
+	return "not implemented"
 
 
 def get_sha256sum_of_file(file_path: str):
