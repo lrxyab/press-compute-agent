@@ -33,9 +33,10 @@ def reboot(instance_id: str):
 
 
 @frappe.whitelist(methods=["POST"])
-def resize(instance_id: str, memory: int, vcpus: int):
+def resize(instance_id: str, memory: int, vcpus: int, machine_type: str | None = None):
 	virtual_machine_doc = frappe.get_doc("Virtual Machine", {"uuid": instance_id})
 	virtual_machine_doc.memory = memory
 	virtual_machine_doc.number_of_vcpus = vcpus
+	virtual_machine_doc.virtual_machine_type = machine_type
 	virtual_machine_doc.save()
 	frappe.enqueue_doc("Virtual Machine", virtual_machine_doc.name, "_restart", enqueue_after_commit=True)
