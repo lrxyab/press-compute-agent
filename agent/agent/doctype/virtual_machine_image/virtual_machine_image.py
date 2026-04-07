@@ -44,9 +44,13 @@ class VirtualMachineImage(Document):
 	def take_image(self):
 		match self.storage_medium:
 			case "File":
-				frappe.enqueue_doc("Virtual Machine Image", self.name, "_take_image_file")
+				frappe.enqueue_doc(
+					"Virtual Machine Image", self.name, "_take_image_file", enqueue_after_commit=True
+				)
 			case "Ceph":
-				frappe.enqueue_doc("Virtual Machine Image", self.name, "_take_image_ceph")
+				frappe.enqueue_doc(
+					"Virtual Machine Image", self.name, "_take_image_ceph", enqueue_after_commit=True
+				)
 
 	def _take_image_file(self):
 		image_path = Path(CONFIG_PATH, "images", f"{uuid4()}.qcow2")

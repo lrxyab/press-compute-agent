@@ -12,5 +12,5 @@ def new(instance_id: str):
 
 	virtual_machine_image_doc.save()
 
-	frappe.enqueue_doc("Virtual Machine Image", virtual_machine_image_doc.name, "take_image_file")
+	virtual_machine_image_doc.take_image()
 	return virtual_machine_image_doc.name
