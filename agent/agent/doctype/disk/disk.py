@@ -114,6 +114,9 @@ class Disk(Document):
 	def set_disk_size(self):
 		match self.storage_medium:
 			case "File":
-				subprocess.call(["qemu-img", "resize", "-f", "qcow2", self.get_path(), f"{self.size}G"])
+				size = int(self.size)
+				subprocess.call(
+					["qemu-img", "resize", "-f", "qcow2", self.get_path(), f"{size}G"], shell=False
+				)
 			case "Ceph":
 				self.ceph.resize(self.size)
