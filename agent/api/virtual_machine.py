@@ -33,10 +33,23 @@ def reboot(instance_id: str):
 
 
 @frappe.whitelist(methods=["POST"])
-def resize(instance_id: str, memory: int, vcpus: int, machine_type: str | None = None):
-	virtual_machine_doc = frappe.get_doc("Virtual Machine", {"uuid": instance_id})
-	virtual_machine_doc.memory = memory
-	virtual_machine_doc.number_of_vcpus = vcpus
-	virtual_machine_doc.virtual_machine_type = machine_type
-	virtual_machine_doc.save()
-	frappe.enqueue_doc("Virtual Machine", virtual_machine_doc.name, "_restart", enqueue_after_commit=True)
+def resize(
+	instance_id: str,
+	memory: int,
+	vcpus: int,
+	root_disk_size: int,
+	machine_type: str | None = None,
+	resize_disk: bool | None = None,
+):
+	virtual_machine_name = frappe.db.get_value("Virtual Machine", {"uuid": instance_id}, "name")
+	frappe.enqueue_doc(
+		"Virtual Machine",
+		virtual_machine_name,
+		"resize_and_restart",
+		memory=memory,
+		vcpus=vcpus,
+		root_disk_size=root_disk_size,
+		machine_type=machine_type,
+		resize_disk=resize_disk,
+		enqueue_after_commit=True,
+	)
