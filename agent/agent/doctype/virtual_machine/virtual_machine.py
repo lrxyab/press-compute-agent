@@ -9,7 +9,7 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 from urllib.parse import urlencode, urljoin
 from uuid import uuid4
 from xml.dom import minidom
@@ -20,8 +20,9 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils.caching import redis_cache
 from frappe.utils.password import get_decrypted_password
-from frappe.utils.synchronization import filelock
 
+if TYPE_CHECKING:
+	from agent.agent.doctype.disk.disk import Disk
 from agent.agent.doctype.virtual_machine_image.virtual_machine_image import get_vmi_download_token
 from agent.configuration.configs import XML_CONFIG
 from agent.configuration.connections import libvirt_connection
@@ -222,6 +223,28 @@ class VirtualMachine(Document):
 				break
 			time.sleep(0.3)
 		self.start()
+
+	def resize_and_restart(
+		self,
+		memory: int,
+		vcpus: int,
+		root_disk_size: int,
+		machine_type: str | None = None,
+		resize_disk: bool | None = None,
+	):
+		self.memory = memory
+		self.number_of_vcpus = vcpus
+		self.virtual_machine_type = machine_type
+
+		# TODO: Atomic resizing for qcow2
+		if resize_disk:
+			root_disk = self.get_disk("vda")
+			if root_disk:
+				root_disk.size = root_disk_size
+				root_disk.save()
+		self.save()
+
+		self._restart()
 
 	def apply_config(self, define=False):
 		self.xml = get_new_config()
@@ -512,11 +535,16 @@ class VirtualMachine(Document):
 				break
 
 	def get_image_path(self):
+		disk = self.get_disk("vda")
+		if disk:
+			return disk.get_path()
+		return None
+
+	def get_disk(self, device) -> Disk | None:
 		for disk in self.disks:
-			if disk.device == "vda":
-				disk = frappe.get_doc("Disk", disk.disk)
-				return disk.get_path()
-		return ""
+			if disk.device == device:
+				return frappe.get_doc("Disk", disk.disk)
+		return None
 
 	@frappe.whitelist()
 	def get_volumes(self):
