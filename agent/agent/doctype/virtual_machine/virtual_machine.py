@@ -230,7 +230,6 @@ class VirtualMachine(Document):
 		vcpus: int,
 		root_disk_size: int,
 		machine_type: str | None = None,
-		resize_disk: bool | None = None,
 	):
 		self.memory = memory
 		self.number_of_vcpus = vcpus
@@ -246,12 +245,6 @@ class VirtualMachine(Document):
 				break
 			time.sleep(0.3)
 
-		# TODO: Atomic resizing for qcow2
-		if resize_disk:
-			root_disk = self.get_disk("vda")
-			if root_disk:
-				root_disk.size = root_disk_size
-				root_disk.save()
 		self.start()
 
 	def apply_config(self, define=False):

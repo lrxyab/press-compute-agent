@@ -39,7 +39,6 @@ def resize(
 	vcpus: int,
 	root_disk_size: int,
 	machine_type: str | None = None,
-	resize_disk: bool | None = None,
 ):
 	virtual_machine_name = frappe.db.get_value("Virtual Machine", {"uuid": instance_id}, "name")
 	frappe.enqueue_doc(
@@ -50,6 +49,5 @@ def resize(
 		vcpus=vcpus,
 		root_disk_size=root_disk_size,
 		machine_type=machine_type,
-		resize_disk=resize_disk,
 		enqueue_after_commit=True,
 	)
