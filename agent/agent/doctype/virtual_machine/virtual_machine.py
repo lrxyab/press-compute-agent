@@ -228,20 +228,20 @@ class VirtualMachine(Document):
 		self,
 		memory: int,
 		vcpus: int,
-		root_disk_size: int,
 		machine_type: str | None = None,
 	):
+		self.stop()
+
 		self.memory = memory
 		self.number_of_vcpus = vcpus
 		self.virtual_machine_type = machine_type
 
 		self.save()
 
-		self.stop()
-
 		time.sleep(0.3)
 		while True:
-			if self.state != "Running":
+			state = self.state
+			if state != "Running":
 				break
 			time.sleep(0.3)
 
