@@ -39,13 +39,13 @@ def resize(
 	vcpus: int,
 	machine_type: str | None = None,
 ):
-	virtual_machine_name = frappe.db.get_value("Virtual Machine", {"uuid": instance_id}, "name")
-	frappe.enqueue_doc(
-		"Virtual Machine",
-		virtual_machine_name,
-		"resize_and_restart",
-		memory=memory,
-		vcpus=vcpus,
-		machine_type=machine_type,
-		enqueue_after_commit=True,
-	)
+	virtual_machine_doc = frappe.get_doc("Virtual Machine", {"uuid": instance_id})
+
+	if virtual_machine_doc.state == "Running":
+		frappe.throw("Cannot resize a running instance.")
+
+	virtual_machine_doc.memory = memory
+	virtual_machine_doc.number_of_vcpus = vcpus
+	virtual_machine_doc.virtual_machine_type = machine_type
+
+	virtual_machine_doc.save()
