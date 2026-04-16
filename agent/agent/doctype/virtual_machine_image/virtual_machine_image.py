@@ -1,7 +1,9 @@
 # Copyright (c) 2025, ayush@frappe.io and contributors
 # For license information, please see license.txt
 
+import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import frappe
@@ -11,6 +13,9 @@ from werkzeug.utils import send_file
 from agent.agent.backup_lib.backup import VMBackup
 from agent.configuration.paths import CONFIG_PATH
 from agent.utils import get_connection_to_orchestrator, verify_jwt
+
+if TYPE_CHECKING:
+	from agent.agent.doctype.virtual_machine.virtual_machine import VirtualMachine
 
 
 class VirtualMachineImage(Document):
@@ -43,7 +48,13 @@ class VirtualMachineImage(Document):
 	def on_change(self):
 		pass
 
-	@frappe.whitelist()
+	@frappe.whitelist(methods=["POST"])
+	def delete_image(self):
+		os.remove(self.file_path)
+		self.status = "Unavailable"
+		self.save()
+
+	@frappe.whitelist(methods=["POST"])
 	def take_image(self):
 		match self.storage_medium:
 			case "File":
@@ -56,11 +67,25 @@ class VirtualMachineImage(Document):
 				)
 
 	def _take_image_file(self):
-		image_path = Path(CONFIG_PATH, "images", f"{uuid4()}.qcow2")
-		virtual_machine = frappe.get_doc("Virtual Machine", self.virtual_machine)
+		if not self.is_snapshot:
+			image_path = "images"
+		else:
+			image_path = "disks"
+
+		image_path = Path(CONFIG_PATH, image_path, f"{uuid4()}.qcow2")
+
+		virtual_machine: VirtualMachine = frappe.get_doc("Virtual Machine", self.virtual_machine)
 		if self.status == "Running":
-			backup = VMBackup(virtual_machine.domain)
-			backup.backup_disk("vda", str(image_path.absolute()))
+			backup = VMBackup(virtual_machine.domain, self.name)
+			if self.device:
+				device = self.device
+			else:
+				if self.is_snapshot:
+					frappe.throw("No device specified")
+				else:
+					device = "vda"
+
+			backup.backup_disk(device, str(image_path.absolute()))
 			backup.begin()
 		else:
 			import shutil
