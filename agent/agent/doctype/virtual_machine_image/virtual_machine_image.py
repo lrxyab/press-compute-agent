@@ -131,6 +131,14 @@ class VirtualMachineImage(Document):
 		# no sha256sum, ceph doesnt work with that
 		self.save()
 
+	@property
+	def progress(self):
+		if self.status == "Available":
+			return 100
+		progress = frappe.cache.get_value(f"virtual_machine_image::{self.name}")
+
+		return progress * 100 if progress else 0
+
 
 # used by the agent downloading the vmi
 def get_vmi_download_token(name: str):
