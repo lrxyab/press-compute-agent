@@ -2,12 +2,14 @@ import subprocess
 import time
 from xml.dom.minidom import Document
 
+import frappe
 import libvirt
 
 
 class VMBackup:
-	def __init__(self, domain: libvirt.virDomain):
+	def __init__(self, domain: libvirt.virDomain, job_id: str | None = None):
 		self.domain = domain
+		self.job_id = job_id
 
 	def backup_disk(self, disk_device, destination):
 		xml = Document()
@@ -35,7 +37,9 @@ class VMBackup:
 		self.domain.blockCopy(self.disk_device, self.xml, None, libvirt.VIR_DOMAIN_BLOCK_COPY_TRANSIENT_JOB)
 
 		while True:
-			_, completed = self.get_status()
+			progress, completed = self.get_status()
+			if self.job_id:
+				frappe.cache.set_value(f"virtual_machine_image::{self.job_id}", progress)
 			if completed:
 				break
 			time.sleep(0.3)
