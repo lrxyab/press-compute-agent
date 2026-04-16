@@ -15,7 +15,11 @@
   "sha256sum",
   "column_break_ltbd",
   "is_from_vm",
-  "size"
+  "size",
+  "is_root_disk",
+  "device",
+  "is_snapshot",
+  "progress"
  ],
  "fields": [
   {
@@ -29,7 +33,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Draft\nPending\nOngoing\nAvailable"
+   "options": "Draft\nPending\nOngoing\nAvailable\nUnavailable"
   },
   {
    "fieldname": "file_path",
@@ -79,12 +83,36 @@
    "fieldname": "sha256sum",
    "fieldtype": "Data",
    "label": "SHA256Sum"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_root_disk",
+   "fieldtype": "Check",
+   "label": "Is Root Disk"
+  },
+  {
+   "depends_on": "eval: !doc.is_root_disk",
+   "fieldname": "device",
+   "fieldtype": "Data",
+   "label": "Device"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_snapshot",
+   "fieldtype": "Check",
+   "label": "Is Snapshot"
+  },
+  {
+   "fieldname": "progress",
+   "fieldtype": "Percent",
+   "is_virtual": 1,
+   "label": "Progress"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-25 13:32:21.423535",
+ "modified": "2026-04-16 15:13:23.400064",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine Image",

@@ -22,12 +22,15 @@ class VirtualMachineImage(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
+		device: DF.Data | None
 		file_path: DF.Data | None
 		is_from_vm: DF.Check
+		is_root_disk: DF.Check
+		is_snapshot: DF.Check
 		osinfo: DF.Data | None
 		sha256sum: DF.Data | None
 		size: DF.Data | None
-		status: DF.Literal["Draft", "Pending", "Ongoing", "Available"]
+		status: DF.Literal["Draft", "Pending", "Ongoing", "Available", "Unavailable"]
 		storage_medium: DF.Literal["File", "Ceph"]
 		virtual_machine: DF.Link | None
 	# end: auto-generated types
