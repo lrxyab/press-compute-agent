@@ -33,6 +33,7 @@ class VirtualMachineImage(Document):
 		is_root_disk: DF.Check
 		is_snapshot: DF.Check
 		osinfo: DF.Data | None
+		progress: DF.Percent
 		sha256sum: DF.Data | None
 		size: DF.Data | None
 		status: DF.Literal["Draft", "Pending", "Ongoing", "Available", "Unavailable"]
@@ -75,15 +76,14 @@ class VirtualMachineImage(Document):
 		image_path = Path(CONFIG_PATH, image_path, f"{uuid4()}.qcow2")
 
 		virtual_machine: VirtualMachine = frappe.get_doc("Virtual Machine", self.virtual_machine)
-		if self.status == "Running":
+		if virtual_machine.state == "Running":
 			backup = VMBackup(virtual_machine.domain, self.name)
 			if self.device:
 				device = self.device
 			else:
+				device = "vda"
 				if self.is_snapshot:
 					frappe.throw("No device specified")
-				else:
-					device = "vda"
 
 			backup.backup_disk(device, str(image_path.absolute()))
 			backup.begin()
@@ -91,7 +91,7 @@ class VirtualMachineImage(Document):
 			import shutil
 
 			source_image_path = virtual_machine.get_image_path()
-			shutil.copy(source_image_path, image_path)
+			shutil.copy(source_image_path, image_path.absolute())
 		self.file_path = str(image_path.absolute())
 		self.status = "Available"
 
@@ -102,6 +102,7 @@ class VirtualMachineImage(Document):
 				break
 
 		self.sha256sum = get_sha256sum_of_file(self.file_path)
+		self.progress = 100
 		self.save()
 
 	def _take_image_ceph(self):
@@ -130,14 +131,6 @@ class VirtualMachineImage(Document):
 				break
 		# no sha256sum, ceph doesnt work with that
 		self.save()
-
-	@property
-	def progress(self):
-		if self.status == "Available":
-			return 100
-		progress = frappe.cache.get_value(f"virtual_machine_image::{self.name}")
-
-		return progress * 100 if progress else 0
 
 
 # used by the agent downloading the vmi

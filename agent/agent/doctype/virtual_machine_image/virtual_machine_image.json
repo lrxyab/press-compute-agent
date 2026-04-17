@@ -105,14 +105,14 @@
   {
    "fieldname": "progress",
    "fieldtype": "Percent",
-   "is_virtual": 1,
-   "label": "Progress"
+   "label": "Progress",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-16 15:13:23.400064",
+ "modified": "2026-04-17 10:59:28.443548",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine Image",

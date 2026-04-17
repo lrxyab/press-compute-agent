@@ -7,9 +7,9 @@ import libvirt
 
 
 class VMBackup:
-	def __init__(self, domain: libvirt.virDomain, job_id: str | None = None):
+	def __init__(self, domain: libvirt.virDomain, image_id: str | None = None):
 		self.domain = domain
-		self.job_id = job_id
+		self.image_id = image_id
 
 	def backup_disk(self, disk_device, destination):
 		xml = Document()
@@ -38,8 +38,19 @@ class VMBackup:
 
 		while True:
 			progress, completed = self.get_status()
-			if self.job_id:
-				frappe.cache.set_value(f"virtual_machine_image::{self.job_id}", progress)
+			if self.image_id:
+				if completed:
+					percent_progress = 100
+				else:
+					percent_progress = progress * 100
+				frappe.db.set_value(
+					"Virtual Machine Image",
+					self.image_id,
+					"progress",
+					percent_progress,
+					update_modified=False,
+				)
+				frappe.db.commit()
 			if completed:
 				break
 			time.sleep(0.3)
