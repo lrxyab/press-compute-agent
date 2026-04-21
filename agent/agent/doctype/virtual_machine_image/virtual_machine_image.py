@@ -1,33 +1,24 @@
 # Copyright (c) 2025, ayush@frappe.io and contributors
 # For license information, please see license.txt
 
-import os
-from pathlib import Path
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
 import frappe
-from frappe.model.document import Document
 from werkzeug.utils import send_file
 
-from agent.agent.backup_lib.backup import VMBackup
-from agent.configuration.paths import CONFIG_PATH
+from agent.agent.doctype.snapshot.snapshot import BaseSnapshot
 from agent.utils import get_connection_to_orchestrator, verify_jwt
 
-if TYPE_CHECKING:
-	from agent.agent.doctype.virtual_machine.virtual_machine import VirtualMachine
 
-
-class VirtualMachineImage(Document):
+class VirtualMachineImage(BaseSnapshot):
 	# begin: auto-generated types
 	# This code is auto-generated. Do not modify anything in this block.
-
-	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
 		device: DF.Data | None
+		disk: DF.Link | None
 		file_path: DF.Data | None
 		is_from_vm: DF.Check
 		is_root_disk: DF.Check
@@ -41,96 +32,23 @@ class VirtualMachineImage(Document):
 		virtual_machine: DF.Link | None
 	# end: auto-generated types
 
-	pass
+	def __init__(self, *args, **kwargs):
+		print(args, kwargs)
+		super().__init__(*args, **kwargs)
+		self.set_device()
+		self.set_image_path()
 
-	def before_insert(self):
-		pass
+	def set_device(self):
+		if not self.device:
+			if self.is_snapshot:
+				frappe.throw("No device specified")
+			self.device = "vda"
 
-	def on_change(self):
-		pass
-
-	@frappe.whitelist(methods=["POST"])
-	def delete_image(self):
-		os.remove(self.file_path)
-		self.status = "Unavailable"
-		self.save()
-
-	@frappe.whitelist(methods=["POST"])
-	def take_image(self):
-		match self.storage_medium:
-			case "File":
-				frappe.enqueue_doc(
-					"Virtual Machine Image", self.name, "_take_image_file", enqueue_after_commit=True
-				)
-			case "Ceph":
-				frappe.enqueue_doc(
-					"Virtual Machine Image", self.name, "_take_image_ceph", enqueue_after_commit=True
-				)
-
-	def _take_image_file(self):
+	def set_image_path(self):
 		if not self.is_snapshot:
-			image_path = "images"
+			self.image_path = "images"
 		else:
-			image_path = "disks"
-
-		image_path = Path(CONFIG_PATH, image_path, f"{uuid4()}.qcow2")
-
-		virtual_machine: VirtualMachine = frappe.get_doc("Virtual Machine", self.virtual_machine)
-		if virtual_machine.state == "Running":
-			backup = VMBackup(virtual_machine.domain, self.name)
-			if self.device:
-				device = self.device
-			else:
-				device = "vda"
-				if self.is_snapshot:
-					frappe.throw("No device specified")
-
-			backup.backup_disk(device, str(image_path.absolute()))
-			backup.begin()
-		else:
-			import shutil
-
-			source_image_path = virtual_machine.get_image_path()
-			shutil.copy(source_image_path, image_path.absolute())
-		self.file_path = str(image_path.absolute())
-		self.status = "Available"
-
-		for disk in virtual_machine.disks:
-			if disk.device == "vda":
-				root_disk_name = disk.disk
-				self.size = frappe.db.get_value("Disk", root_disk_name, "size")
-				break
-
-		self.sha256sum = get_sha256sum_of_file(self.file_path)
-		self.progress = 100
-		self.save()
-
-	def _take_image_ceph(self):
-		new_uuid = uuid4()
-		virtual_machine = frappe.get_doc("Virtual Machine", self.virtual_machine)
-		source_image_path = virtual_machine.get_image_path()
-		try:
-			if self.status == "Running":
-				virtual_machine.domain.suspend()
-			ceph = Ceph(
-				source_image_path,
-				get_decrypted_password("Compute Settings", "Compute Settings", "ceph_api_key"),
-				get_decrypted_password("Compute Settings", "Compute Settings", "ceph_mgr_password"),
-			)
-			ceph.copy_disk(new_uuid)
-		finally:
-			if self.status == "Running":
-				virtual_machine.domain.resume()
-		self.file_path = frappe.db.get_single_value("Compute Settings", "def_rbd_pool") + "/" + new_uuid
-		self.status = "Available"
-
-		for disk in virtual_machine.disks:
-			if disk.device == "vda":
-				root_disk_name = disk.disk
-				self.size = frappe.db.get_value("Disk", root_disk_name, "size")
-				break
-		# no sha256sum, ceph doesnt work with that
-		self.save()
+			self.image_path = "disks"
 
 
 # used by the agent downloading the vmi
@@ -161,11 +79,3 @@ def download_vmi(token: str):
 			file_path, environ=frappe.request.environ, conditional=True, download_name=f"{name}.qcow2"
 		)
 	return "not implemented"
-
-
-def get_sha256sum_of_file(file_path: str):
-	with open(file_path, "rb") as file:
-		import hashlib
-
-		digest = hashlib.file_digest(file, "sha256")
-		return digest.hexdigest()

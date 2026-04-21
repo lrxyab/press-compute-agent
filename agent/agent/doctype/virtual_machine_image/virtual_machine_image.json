@@ -13,6 +13,7 @@
   "storage_medium",
   "osinfo",
   "sha256sum",
+  "disk",
   "column_break_ltbd",
   "is_from_vm",
   "size",
@@ -107,12 +108,18 @@
    "fieldtype": "Percent",
    "label": "Progress",
    "read_only": 1
+  },
+  {
+   "fieldname": "disk",
+   "fieldtype": "Link",
+   "label": "Disk",
+   "options": "Disk"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-17 10:59:28.443548",
+ "modified": "2026-04-20 13:08:19.666151",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine Image",
