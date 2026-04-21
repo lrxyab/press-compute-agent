@@ -33,6 +33,7 @@ class Disk(Document):
 
 		backing_file: DF.Link | None
 		file_path: DF.Data | None
+		from_virtual_machine_image: DF.Check
 		is_primary_disk: DF.Check
 		is_snapshot: DF.Check
 		size: DF.Float
@@ -51,7 +52,7 @@ class Disk(Document):
 		self.file_path = file_path
 		if self.is_snapshot:
 			return
-		if self.is_primary_disk:
+		if self.is_primary_disk or self.from_virtual_machine_image:
 			self.create_system_image()
 			self.set_disk_size()
 		else:

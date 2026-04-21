@@ -14,7 +14,8 @@
   "file_path",
   "backing_file",
   "is_snapshot",
-  "storage_medium"
+  "storage_medium",
+  "from_virtual_machine_image"
  ],
  "fields": [
   {
@@ -72,12 +73,18 @@
    "fieldtype": "Select",
    "label": "Storage Medium",
    "options": "File\nCeph"
+  },
+  {
+   "default": "0",
+   "fieldname": "from_virtual_machine_image",
+   "fieldtype": "Check",
+   "label": "From Virtual Machine Image"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-25 13:32:51.147061",
+ "modified": "2026-04-17 12:13:46.588657",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Disk",
