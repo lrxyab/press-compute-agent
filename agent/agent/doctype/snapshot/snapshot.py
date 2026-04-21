@@ -52,14 +52,21 @@ class BaseSnapshot(Document):
 	def _take_image_file(self):
 		image_path = Path(CONFIG_PATH, self.image_path, f"{uuid4()}.qcow2")
 
-		virtual_machine: VirtualMachine = frappe.get_doc("Virtual Machine", self.virtual_machine)
-		if virtual_machine.state == "Running":
-			domain: virDomain = virtual_machine.domain
-			backup = VMBackup(domain, self.name, self.doctype)
-
-			backup.backup_disk(self.device, str(image_path.absolute()))
-			backup.begin()
+		self.just_copy = False
+		if not self.virtual_machine:
+			self.just_copy = True
 		else:
+			virtual_machine: VirtualMachine = frappe.get_doc("Virtual Machine", self.virtual_machine)
+			if virtual_machine.state == "Running":
+				domain: virDomain = virtual_machine.domain
+				backup = VMBackup(domain, self.name, self.doctype)
+
+				backup.backup_disk(self.device, str(image_path.absolute()))
+				backup.begin()
+			else:
+				self.just_copy = True
+
+		if self.just_copy:
 			import shutil
 
 			source_image_path = virtual_machine.get_image_path()
@@ -132,9 +139,32 @@ class Snapshot(BaseSnapshot):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
+		disk: DF.Link | None
+		file_path: DF.Data | None
+		progress: DF.Percent
+		sha256sum: DF.Data | None
+		status: DF.Literal["Draft", "Available", "Pending", "Unavailable"]
 	# end: auto-generated types
 
-	pass
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.not_attached = False
+
+		self.set_device()
+		self.image_path = "disks"
+
+	def set_device(self):
+		if not self.disk:
+			frappe.throw("No disk set")
+
+		vm_disk = frappe.get_value("VM Disk", self.disk, ["name", "device", "parent"], as_dict=True)
+
+		if not vm_disk.name:
+			self.not_attached = True
+			assert frappe.db.get_value("Disk", self.disk)
+		else:
+			self.device = vm_disk.device
+			self.virtual_machine = vm_disk.parent
 
 
 def get_sha256sum_of_file(file_path: str):

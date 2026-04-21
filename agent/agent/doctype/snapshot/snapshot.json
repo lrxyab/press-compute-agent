@@ -5,18 +5,46 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "section_break_gv89"
+  "file_path",
+  "sha256sum",
+  "status",
+  "disk",
+  "progress"
  ],
  "fields": [
   {
-   "fieldname": "section_break_gv89",
-   "fieldtype": "Section Break"
+   "fieldname": "file_path",
+   "fieldtype": "Data",
+   "label": "File Path"
+  },
+  {
+   "fieldname": "sha256sum",
+   "fieldtype": "Data",
+   "label": "SHA256Sum"
+  },
+  {
+   "fieldname": "progress",
+   "fieldtype": "Percent",
+   "label": "Progress",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nAvailable\nPending\nUnavailable"
+  },
+  {
+   "fieldname": "disk",
+   "fieldtype": "Link",
+   "label": "Disk",
+   "options": "Disk"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-20 14:10:42.964977",
+ "modified": "2026-04-22 03:11:29.155052",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Snapshot",
