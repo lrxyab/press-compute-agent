@@ -33,7 +33,6 @@ class VirtualMachineImage(BaseSnapshot):
 	# end: auto-generated types
 
 	def __init__(self, *args, **kwargs):
-		print(args, kwargs)
 		super().__init__(*args, **kwargs)
 		self.set_device()
 		self.set_image_path()
@@ -45,6 +44,7 @@ class VirtualMachineImage(BaseSnapshot):
 			self.device = "vda"
 
 	def set_image_path(self):
+		self.source_image_path = None
 		if not self.is_snapshot:
 			self.image_path = "images"
 		else:

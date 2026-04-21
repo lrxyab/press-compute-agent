@@ -43,6 +43,8 @@ It expects the following methods to be implemented:
 class BaseSnapshot(Document):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
+		self.image_path = "disks"
+		self.not_attached = False
 
 	def delete_image(self):
 		os.remove(self.file_path)
@@ -57,28 +59,33 @@ class BaseSnapshot(Document):
 			self.just_copy = True
 		else:
 			virtual_machine: VirtualMachine = frappe.get_doc("Virtual Machine", self.virtual_machine)
+
+			if not self.source_image_path:
+				self.source_image_path = virtual_machine.get_image_path()
+
 			if virtual_machine.state == "Running":
 				domain: virDomain = virtual_machine.domain
 				backup = VMBackup(domain, self.name, self.doctype)
 
 				backup.backup_disk(self.device, str(image_path.absolute()))
 				backup.begin()
+
+				for disk in virtual_machine.disks:
+					if disk.device == self.device:
+						root_disk_name = disk.disk
+						self.size = frappe.db.get_value("Disk", root_disk_name, "size")
+						break
+
 			else:
 				self.just_copy = True
 
 		if self.just_copy:
 			import shutil
 
-			source_image_path = virtual_machine.get_image_path()
-			shutil.copy(source_image_path, image_path.absolute())
+			shutil.copy(self.source_image_path, image_path.absolute())
+
 		self.file_path = str(image_path.absolute())
 		self.status = "Available"
-
-		for disk in virtual_machine.disks:
-			if disk.device == self.device:
-				root_disk_name = disk.disk
-				self.size = frappe.db.get_value("Disk", root_disk_name, "size")
-				break
 
 		self.sha256sum = get_sha256sum_of_file(self.file_path)
 		self.progress = 100
@@ -86,11 +93,7 @@ class BaseSnapshot(Document):
 
 	@frappe.whitelist()
 	def take_image(self):
-		match self.storage_medium:
-			case "File":
-				frappe.enqueue_doc(self.doctype, self.name, "_take_image_file", enqueue_after_commit=True)
-			case "Ceph":
-				frappe.enqueue_doc(self.doctype, self.name, "_take_image_ceph", enqueue_after_commit=True)
+		frappe.enqueue_doc(self.doctype, self.name, "_take_image_file", enqueue_after_commit=True)
 
 	def create_disk_from_image(self, size: int):
 		disk_doc: Disk = frappe.new_doc("Disk")
@@ -148,23 +151,24 @@ class Snapshot(BaseSnapshot):
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
-		self.not_attached = False
+		self.virtual_machine = None
 
+	def validate(self):
 		self.set_device()
-		self.image_path = "disks"
 
 	def set_device(self):
-		if not self.disk:
-			frappe.throw("No disk set")
-
 		vm_disk = frappe.get_value("VM Disk", self.disk, ["name", "device", "parent"], as_dict=True)
 
-		if not vm_disk.name:
+		if not vm_disk:
 			self.not_attached = True
 			assert frappe.db.get_value("Disk", self.disk)
 		else:
 			self.device = vm_disk.device
 			self.virtual_machine = vm_disk.parent
+
+	@property
+	def source_image_path(self):
+		return frappe.db.get_value("Disk", self.disk, "file_path")
 
 
 def get_sha256sum_of_file(file_path: str):
