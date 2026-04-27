@@ -49,3 +49,14 @@ def resize(
 	virtual_machine_doc.virtual_machine_type = machine_type
 
 	virtual_machine_doc.save()
+
+
+@frappe.whitelist(methods=["POST"])
+def remove_public_ip(instance_id: str):
+	virtual_machine_doc = frappe.get_doc("Virtual Machine", {"uuid": instance_id})
+
+	removed_ip = virtual_machine_doc.public_ip_address
+	virtual_machine_doc.public_ip_address = None
+	virtual_machine_doc.save()
+
+	return removed_ip
