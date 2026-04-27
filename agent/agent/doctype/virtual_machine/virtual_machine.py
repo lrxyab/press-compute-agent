@@ -689,6 +689,18 @@ class VirtualMachine(Document):
 			device_xml_only=True,
 		)
 		interface_config = interface_config.toxml()
+		self.detach_network_interface(interface_config)
+
+		if self.has_private_ip:
+			self.attach_network_interface(interface_config)
+
+	def attach_network_interface(self, interface_config: str):
+		if self.domain:
+			self.domain.attachDeviceFlags(
+				interface_config, libvirt.VIR_DOMAIN_AFFECT_LIVE | libvirt.VIR_DOMAIN_AFFECT_CONFIG
+			)
+
+	def detach_network_interface(self, interface_config: str):
 		if self.domain:
 			try:
 				self.domain.detachDeviceFlags(
@@ -700,11 +712,6 @@ class VirtualMachine(Document):
 					pass
 				else:
 					raise e
-
-			if self.has_private_ip:
-				self.domain.attachDeviceFlags(
-					interface_config, libvirt.VIR_DOMAIN_AFFECT_LIVE | libvirt.VIR_DOMAIN_AFFECT_CONFIG
-				)
 
 	@property
 	def reboot_lock_key(self):
