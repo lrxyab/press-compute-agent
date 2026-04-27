@@ -1,3 +1,5 @@
+from uuid import UUID
+
 import frappe
 import jwt
 from frappe.frappeclient import FrappeClient

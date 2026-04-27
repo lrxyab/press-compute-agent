@@ -117,6 +117,7 @@ class VirtualMachine(Document):
 		if not doc_before_save:
 			return
 		self.configure_disks()
+		self.configure_public_network_interface()
 		self.configure_private_network_interface()
 
 	def configure_disks(self):
@@ -133,6 +134,36 @@ class VirtualMachine(Document):
 				disk_doc = frappe.get_doc("Disk", disk[0])
 				path = disk_doc.file_path
 				self.attach_disk(path, disk[1])
+
+	def configure_public_network_interface(self):
+		if self.has_value_changed("public_ip_address"):
+			bridge = frappe.db.get_single_value("Compute Settings", "ovs_bridge")
+			if not bridge:
+				frappe.throw("Bridge not set in Compute Settings")
+
+			doc_before_save = self.get_doc_before_save()
+
+			if doc_before_save.public_ip_address:
+				detach_network_interface = self.generate_network_interface_xml(
+					"Bridge", bridge, mac_address=doc_before_save.public_mac_address, device_xml_only=True
+				)
+			else:
+				detach_network_interface = self.generate_network_interface_xml(
+					"Network", "default", mac_address=doc_before_save.public_mac_address, device_xml_only=True
+				)
+				print(f"{detach_network_interface.toxml()}")
+
+			if self.public_ip_address:
+				attach_network_interface = self.generate_network_interface_xml(
+					"Bridge", bridge, mac_address=self.public_mac_address, device_xml_only=True
+				)
+			else:
+				attach_network_interface = self.generate_network_interface_xml(
+					"Network", "default", mac_address=self.public_mac_address, device_xml_only=True
+				)
+
+			self.detach_network_interface(detach_network_interface.toxml())
+			self.attach_network_interface(attach_network_interface.toxml())
 
 	def configure_private_network_interface(self):
 		if self.has_value_changed("has_private_ip"):
@@ -402,6 +433,8 @@ class VirtualMachine(Document):
 				frappe.throw("Bridge not set in Compute Settings")
 
 			self.append_network_interface_to_config("Bridge", bridge, mac_address=self.public_mac_address)
+		else:
+			self.append_network_interface_to_config("Network", "default", mac_address=self.public_mac_address)
 		if self.has_private_ip:
 			# Hardcoding bridge name right now. Safe to assume br-int is the
 			# default bridge name for OVN on most installations.
@@ -449,7 +482,7 @@ class VirtualMachine(Document):
 		name: str,
 		mac_address: str | None = None,
 		interface_id: str | None = None,
-		device_xml_only=False,
+		device_xml_only: bool = False,
 	):
 		if not device_xml_only:
 			devices = self.xml.getElementsByTagName("devices")[0]
@@ -734,7 +767,7 @@ class VirtualMachine(Document):
 	@property
 	def public_mac_address(self):
 		if not self.public_ip_address:
-			return None
+			return mac_address_from_uuid(self.uuid)
 		return mac_address_generator(self.public_ip_address)
 
 	@property

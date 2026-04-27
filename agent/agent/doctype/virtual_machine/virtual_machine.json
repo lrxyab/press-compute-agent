@@ -113,8 +113,7 @@
    "fieldname": "public_ip_address",
    "fieldtype": "Data",
    "label": "Public IP Address",
-   "options": "IP Address",
-   "set_only_once": 1
+   "options": "IP Address"
   },
   {
    "default": "Undefined",
@@ -136,7 +135,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-14 18:03:52.344617",
+ "modified": "2026-04-27 16:13:49.269536",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine",
