@@ -1,9 +1,10 @@
 network:
   version: 2
   ethernets:
-    public:
+    eth0:
       match:
         macaddress: {{ public_mac_address }}
+      set-name: eth0
       dhcp4: false
       addresses:
         - {{ ip_address }}/32
@@ -15,7 +16,8 @@ network:
         addresses:
           - 8.8.8.8
           - 4.4.4.4
-    private:
+    eth1:
       match:
         macaddress: {{ private_mac_address }}
+      set-name: eth1
       dhcp4: true
