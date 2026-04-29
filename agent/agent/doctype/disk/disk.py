@@ -93,7 +93,9 @@ class Disk(Document):
 	def on_change(self):
 		if self.is_snapshot:
 			return
-		if self.has_value_changed("size"):
+
+		# Stupid framework
+		if self.has_value_changed("size") and self.get_doc_before_save():
 			self.set_disk_size()
 
 	def create_disk(self):
