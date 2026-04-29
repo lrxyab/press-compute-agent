@@ -673,16 +673,25 @@ class VirtualMachine(Document):
 		# In the default configuration, at least what we use, the public_ip_address on the bridge
 		# will act as the gateway
 		gateway = frappe.db.get_single_value("Compute Settings", "public_ip_address")
-		network_config = frappe.render_template(
-			"agent/agent/doctype/virtual_machine/network-config.jinja2",
-			context={
-				"ip_address": self.public_ip_address,
-				"public_mac_address": self.public_mac_address,
-				"gateway": gateway,
-				"private_mac_address": self.private_mac_address,
-			},
-			is_path=True,
-		)
+		if self.public_ip_address:
+			network_config = frappe.render_template(
+				"agent/agent/doctype/virtual_machine/network-config.jinja2",
+				context={
+					"ip_address": self.public_ip_address,
+					"public_mac_address": self.public_mac_address,
+					"gateway": gateway,
+					"private_mac_address": self.private_mac_address,
+				},
+				is_path=True,
+			)
+		else:
+			network_config = frappe.render_template(
+				"agent/agent/doctype/virtual_machine/network-config-without-public-ip.jinja2",
+				context={
+					"private_mac_address": self.private_mac_address,
+				},
+				is_path=True,
+			)
 
 		with tempfile.TemporaryDirectory() as d:
 			temp_path = Path(d)
@@ -874,7 +883,7 @@ def _new_vm_from_image(
 	machine_type,
 	memory,
 	number_of_vcpus,
-	public_ip_address,
+	public_ip_address=None,
 	ssh_key=None,
 	cloud_init=None,
 	root_disk_size=None,
@@ -912,7 +921,7 @@ def new_vm_from_image(
 	machine_type: str,
 	memory: int,
 	number_of_vcpus: int,
-	public_ip_address: str,
+	public_ip_address: str | None = None,
 	ssh_key: str | None = None,
 	cloud_init: str | None = None,
 	root_disk_size: int | None = None,
