@@ -65,3 +65,9 @@ def detach_disk(instance_id: str, volume_id: str) -> VirtualMachine:
 	virtual_machine_doc.save()
 
 	return virtual_machine_doc
+
+
+@frappe.whitelist(methods=["POST"])
+def sync(volume_id: str):
+	disk_doc: Disk = frappe.get_doc("Disk", volume_id)
+	return disk_doc

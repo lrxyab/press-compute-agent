@@ -6,11 +6,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+import boto3
 import frappe
 from frappe.model.document import Document
 
 from agent.agent.backup_lib.backup import VMBackup
 from agent.configuration.paths import CONFIG_PATH
+from agent.utils import get_aws_credentials
 
 if TYPE_CHECKING:
 	from libvirt import virDomain
@@ -60,8 +62,7 @@ class BaseSnapshot(Document):
 		else:
 			virtual_machine: VirtualMachine = frappe.get_doc("Virtual Machine", self.virtual_machine)
 
-			if not self.source_image_path:
-				self.source_image_path = virtual_machine.get_image_path()
+			self.source_image_path = virtual_machine.get_image_path()
 
 			if virtual_machine.state == "Running":
 				domain: virDomain = virtual_machine.domain
@@ -85,11 +86,23 @@ class BaseSnapshot(Document):
 			shutil.copy(self.source_image_path, image_path.absolute())
 
 		self.file_path = str(image_path.absolute())
-		self.status = "Available"
+		if self.doctype == "Snapshot":
+			self.status = "Unavailable"
+		else:
+			self.status = "Available"
 
 		self.sha256sum = get_sha256sum_of_file(self.file_path)
 		self.progress = 100
 		self.save()
+
+		"""
+			If it's a snapshot, we need to upload it to S3 after taking the image, but for a virtual machine image, we don't want to do that at all because it's only used for creating disks and attaching to VMs, not for backup purposes and because we want to keep the image locally for faster disk creation.
+		"""
+
+		if self.doctype == "Snapshot":
+			frappe.enqueue_doc(
+				self.doctype, self.name, "_upload_file_to_s3_and_delete_local", enqueue_after_commit=True
+			)
 
 	@frappe.whitelist()
 	def take_image(self):
@@ -99,7 +112,14 @@ class BaseSnapshot(Document):
 		disk_doc: Disk = frappe.new_doc("Disk")
 		disk_doc.from_virtual_machine_image = True
 		disk_doc.size = size
-		disk_doc.virtual_machine_image = self.name
+		if self.doctype == "Virtual Machine Image":
+			disk_doc.virtual_machine_image = self.name
+			disk_doc.from_virtual_machine_image = True
+		elif self.doctype == "Snapshot":
+			disk_doc.snapshot = self.name
+			disk_doc.from_snapshot = True
+		else:
+			frappe.throw(_("Doctype not yet supported for creating disk from image").format())
 
 		disk_doc.save()
 
@@ -132,6 +152,34 @@ class BaseSnapshot(Document):
 		# no sha256sum, ceph doesnt work with that
 		self.save()
 
+	def _upload_file_to_s3(self):
+		s3_client, creds = get_s3_client_and_credentials()
+		self.status = "Unavailable"
+		s3_client.upload_file(self.file_path, creds.bucket_name, Key=self.name)
+		self.save()
+
+	def _upload_file_to_s3_and_delete_local(self):
+		self._upload_file_to_s3()
+		os.remove(self.file_path)
+		self.file_path = None
+		self.uploaded_to_s3 = True
+
+		self.status = "Available"
+		self.save()
+
+	@frappe.whitelist(methods=["POST"])
+	def sync(self):
+		if self.uploaded_to_s3 and not self.file_path:
+			s3_client, creds = get_s3_client_and_credentials()
+			try:
+				s3_client.head_object(Bucket=creds.bucket_name, Key=self.name)
+			except s3_client.exceptions.ClientError as e:
+				if e.response["Error"]["Code"] == "404":
+					self.status = "Unavailable"
+					self.save()
+				else:
+					raise e
+
 
 class Snapshot(BaseSnapshot):
 	# begin: auto-generated types
@@ -142,33 +190,17 @@ class Snapshot(BaseSnapshot):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
-		disk: DF.Link | None
 		file_path: DF.Data | None
 		progress: DF.Percent
 		sha256sum: DF.Data | None
 		status: DF.Literal["Draft", "Available", "Pending", "Unavailable"]
+		uploaded_to_s3: DF.Check
+		virtual_machine: DF.Link | None
 	# end: auto-generated types
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
-		self.virtual_machine = None
-
-	def validate(self):
-		self.set_device()
-
-	def set_device(self):
-		vm_disk = frappe.get_value("VM Disk", self.disk, ["name", "device", "parent"], as_dict=True)
-
-		if not vm_disk:
-			self.not_attached = True
-			assert frappe.db.get_value("Disk", self.disk)
-		else:
-			self.device = vm_disk.device
-			self.virtual_machine = vm_disk.parent
-
-	@property
-	def source_image_path(self):
-		return frappe.db.get_value("Disk", self.disk, "file_path")
+		self.device = "vda"  # temporarily
 
 
 def get_sha256sum_of_file(file_path: str):
@@ -177,3 +209,13 @@ def get_sha256sum_of_file(file_path: str):
 
 		digest = hashlib.file_digest(file, "sha256")
 		return digest.hexdigest()
+
+
+def get_s3_client_and_credentials():
+	creds = get_aws_credentials()
+	return boto3.client(
+		"s3",
+		region_name=creds.region_name,
+		aws_access_key_id=creds.aws_access_key_id,
+		aws_secret_access_key=creds.aws_secret_access_key,
+	), creds

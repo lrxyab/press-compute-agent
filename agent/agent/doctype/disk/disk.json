@@ -8,14 +8,17 @@
  "field_order": [
   "size",
   "virtual_machine_image",
+  "snapshot",
   "is_primary_disk",
   "uuid",
+  "status",
   "column_break_ztmf",
   "file_path",
   "backing_file",
   "is_snapshot",
   "storage_medium",
-  "from_virtual_machine_image"
+  "from_virtual_machine_image",
+  "from_snapshot"
  ],
  "fields": [
   {
@@ -65,6 +68,7 @@
    "default": "0",
    "fieldname": "is_snapshot",
    "fieldtype": "Check",
+   "hidden": 1,
    "label": "Is Snapshot"
   },
   {
@@ -79,12 +83,31 @@
    "fieldname": "from_virtual_machine_image",
    "fieldtype": "Check",
    "label": "From Virtual Machine Image"
+  },
+  {
+   "fieldname": "snapshot",
+   "fieldtype": "Link",
+   "label": "Snapshot",
+   "options": "Snapshot"
+  },
+  {
+   "default": "0",
+   "fieldname": "from_snapshot",
+   "fieldtype": "Check",
+   "label": "From Snapshot"
+  },
+  {
+   "default": "Available",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Unavailable\nAvailable"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-17 12:13:46.588657",
+ "modified": "2026-04-26 23:17:47.538112",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Disk",

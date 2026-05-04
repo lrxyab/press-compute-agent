@@ -8,6 +8,7 @@ requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
 dependencies = [
+    "boto3>=1.42.96",
     # "frappe~=15.0.0" # Installed and managed by bench.
     "libvirt-python>=11.9.0",
     "pyjwt>=2.11.0",

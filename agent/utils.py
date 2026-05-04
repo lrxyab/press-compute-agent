@@ -84,3 +84,8 @@ def mac_address_from_uuid(input_uuid: str | UUID):
 	# e.g. 0b11111110 & 0b01000101 = 0b01000100
 	mac[0] &= 0xFE
 	return ":".join(f"{b:02x}" for b in mac)
+
+
+def get_aws_credentials():
+	conn = get_connection_to_orchestrator()
+	return frappe._dict(conn.get_api("orchestrator.api.utils.get_aws_credentials"))

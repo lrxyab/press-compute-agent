@@ -21,6 +21,8 @@ from frappe.model.document import Document
 from frappe.utils.caching import redis_cache
 from frappe.utils.password import get_decrypted_password
 
+from agent.agent.doctype.disk.disk import create_disk_from_snapshot
+
 if TYPE_CHECKING:
 	from agent.agent.doctype.disk.disk import Disk
 from agent.agent.doctype.virtual_machine_image.virtual_machine_image import get_vmi_download_token
@@ -889,8 +891,13 @@ def _new_vm_from_image(
 	root_disk_size=None,
 	has_private_ip=False,
 	uuid=None,
+	snapshot_id=None,
 ):
-	provision_vmi_from_orchestrator(image)
+	if not snapshot_id:
+		provision_vmi_from_orchestrator(image)
+	else:
+		snapshot_disk = create_disk_from_snapshot(snapshot_id)
+
 	vm = frappe.new_doc("Virtual Machine")
 	vm.name = name
 	vm.uuid = uuid
@@ -905,7 +912,8 @@ def _new_vm_from_image(
 	vm.number_of_vcpus = number_of_vcpus
 	vm.has_private_ip = has_private_ip
 
-	# vm.agent = agent.name
+	if snapshot_id:
+		vm.append("disks", {"disk": snapshot_disk, "device": "vda"})
 
 	vm.insert()
 	vm.start()
@@ -926,6 +934,8 @@ def new_vm_from_image(
 	cloud_init: str | None = None,
 	root_disk_size: int | None = None,
 	has_private_ip: bool = False,
+	snapshot_id: str | None = None,
+	instance_id: str | None = None,
 ):
 	# TODO: after profiling, it seems that disk creation takes the most time
 	# safely enqueue it in such a way it doesn't affect functionality
@@ -933,7 +943,11 @@ def new_vm_from_image(
 	# are good enough to be able to afford the creation of the VM to be synchronous
 	# still keeping this structure if in the future there is a need to enqueue creation
 
-	instance_id = str(uuid4())
+	if instance_id:
+		instance_id = uuid.UUID(instance_id)
+	else:
+		instance_id = str(uuid4())
+
 	frappe.enqueue(
 		"agent.agent.doctype.virtual_machine.virtual_machine._new_vm_from_image",
 		name=name,
@@ -947,6 +961,7 @@ def new_vm_from_image(
 		root_disk_size=root_disk_size,
 		has_private_ip=has_private_ip,
 		uuid=instance_id,
+		snapshot_id=snapshot_id,
 		enqueue_after_commit=True,
 	)
 	return instance_id

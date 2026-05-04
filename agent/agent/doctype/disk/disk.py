@@ -13,6 +13,7 @@ from frappe.model.document import Document
 from frappe.utils.password import get_decrypted_password
 
 from agent.agent.ceph_lib.ceph import Ceph
+from agent.agent.doctype.snapshot.snapshot import get_s3_client_and_credentials
 
 if TYPE_CHECKING:
 	from agent.agent.doctype.virtual_machine.virtual_machine import VirtualMachine
@@ -33,10 +34,13 @@ class Disk(Document):
 
 		backing_file: DF.Link | None
 		file_path: DF.Data | None
+		from_snapshot: DF.Check
 		from_virtual_machine_image: DF.Check
 		is_primary_disk: DF.Check
 		is_snapshot: DF.Check
 		size: DF.Float
+		snapshot: DF.Link | None
+		status: DF.Literal["Unavailable", "Available"]
 		storage_medium: DF.Literal["File", "Ceph"]
 		uuid: DF.Data | None
 		virtual_machine_image: DF.Link | None
@@ -54,7 +58,12 @@ class Disk(Document):
 			return
 		if self.is_primary_disk or self.from_virtual_machine_image:
 			self.create_system_image()
-			self.set_disk_size()
+
+			"""
+			If the disk is being created from a snapshot, the actual disk creation will be handled in create_system_image_from_snapshot, so we don't want to call set_disk_size here as it may try to resize a disk that doesn't exist yet.
+			"""
+			if not self.from_snapshot:
+				self.set_disk_size()
 		else:
 			self.create_disk()
 
@@ -74,6 +83,10 @@ class Disk(Document):
 				return os.path.join(DISKS_ROOT, self.uuid + ".qcow2")
 
 	def create_system_image(self):
+		if self.virtual_machine_image:
+			self.create_system_image_from_vmi()
+
+	def create_system_image_from_vmi(self):
 		base_image_path = frappe.db.get_value(
 			"Virtual Machine Image", self.virtual_machine_image, "file_path"
 		)
@@ -146,3 +159,19 @@ class Disk(Document):
 		disk_entry = frappe.db.get_value("VM Disk", {"disk": self.name}, ["parent", "device"], as_dict=True)
 		virtual_machine_doc: VirtualMachine = frappe.get_doc("Virtual Machine", disk_entry.parent)
 		virtual_machine_doc.domain.blockResize(disk_entry.device, self.size * (1024**2))
+
+
+def create_disk_from_snapshot(snapshot_id: int) -> str:
+	s3_client, creds = get_s3_client_and_credentials()
+
+	disk_id = uuid4()
+	file_path = os.path.join(DISKS_ROOT, disk_id + ".qcow2")
+	s3_client.download_file(creds.bucket, snapshot_id, file_path)
+
+	disk_doc: Disk = frappe.new_doc("Disk")
+	disk_doc.from_snapshot = True
+	disk_doc.snapshot = snapshot_id
+	disk_doc.uuid = disk_id
+	disk_doc.save()
+
+	return disk_doc.name

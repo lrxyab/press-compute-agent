@@ -1,6 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
+ "autoname": "UUID",
  "creation": "2026-04-20 14:10:42.964977",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -8,8 +9,9 @@
   "file_path",
   "sha256sum",
   "status",
-  "disk",
-  "progress"
+  "virtual_machine",
+  "progress",
+  "uploaded_to_s3"
  ],
  "fields": [
   {
@@ -35,19 +37,26 @@
    "options": "Draft\nAvailable\nPending\nUnavailable"
   },
   {
-   "fieldname": "disk",
+   "default": "0",
+   "fieldname": "uploaded_to_s3",
+   "fieldtype": "Check",
+   "label": "Uploaded to S3"
+  },
+  {
+   "fieldname": "virtual_machine",
    "fieldtype": "Link",
-   "label": "Disk",
-   "options": "Disk"
+   "label": "Virtual Machine",
+   "options": "Virtual Machine"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-22 03:11:29.155052",
+ "modified": "2026-05-04 10:41:46.428936",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Snapshot",
+ "naming_rule": "UUID",
  "owner": "Administrator",
  "permissions": [
   {
