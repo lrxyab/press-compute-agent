@@ -180,6 +180,26 @@ class BaseSnapshot(Document):
 				else:
 					raise e
 
+	def _delete_from_s3(self):
+		"""Delete snapshot from S3 bucket"""
+		if self.uploaded_to_s3:
+			s3_client, creds = get_s3_client_and_credentials()
+			s3_client.delete_object(Bucket=creds.bucket_name, Key=self.name)
+
+	def mark_unavailable(self):
+		"""Remove snapshot artifacts and retain the document as unavailable."""
+		if self.uploaded_to_s3:
+			self._delete_from_s3()
+
+		if self.file_path and os.path.exists(self.file_path):
+			os.remove(self.file_path)
+
+		self.file_path = None
+		self.uploaded_to_s3 = False
+		self.progress = 0
+		self.status = "Unavailable"
+		self.save()
+
 
 class Snapshot(BaseSnapshot):
 	# begin: auto-generated types

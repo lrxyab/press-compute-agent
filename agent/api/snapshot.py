@@ -23,3 +23,10 @@ def new(instance_id: str):
 def sync(snapshot_id: str):
 	snapshot_doc: Snapshot = frappe.get_doc("Snapshot", snapshot_id)
 	return {"status": snapshot_doc.status, "progress": snapshot_doc.progress}
+
+
+@frappe.whitelist(methods=["POST"])
+def delete(snapshot_id: str):
+	"""Remove snapshot artifacts and keep the document as unavailable."""
+	snapshot_doc: Snapshot = frappe.get_doc("Snapshot", snapshot_id)
+	snapshot_doc.mark_unavailable()
