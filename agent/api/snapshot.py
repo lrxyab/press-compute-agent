@@ -22,7 +22,11 @@ def new(instance_id: str):
 @frappe.whitelist(methods=["GET"])
 def sync(snapshot_id: str):
 	snapshot_doc: Snapshot = frappe.get_doc("Snapshot", snapshot_id)
-	return {"status": snapshot_doc.status, "progress": snapshot_doc.progress}
+	return {
+		"status": snapshot_doc.status,
+		"progress": snapshot_doc.progress,
+		"created": snapshot_doc.creation,
+	}
 
 
 @frappe.whitelist(methods=["POST"])
