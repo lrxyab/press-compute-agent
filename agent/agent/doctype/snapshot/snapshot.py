@@ -195,12 +195,14 @@ class Snapshot(BaseSnapshot):
 		sha256sum: DF.Data | None
 		status: DF.Literal["Draft", "Available", "Pending", "Unavailable"]
 		uploaded_to_s3: DF.Check
+		uuid: DF.Data | None
 		virtual_machine: DF.Link | None
 	# end: auto-generated types
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 		self.device = "vda"  # temporarily
+		self.uuid = str(uuid4())
 
 
 def get_sha256sum_of_file(file_path: str):

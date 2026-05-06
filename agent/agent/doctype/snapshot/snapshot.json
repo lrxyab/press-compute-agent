@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "UUID",
+ "autoname": "format:{uuid}",
  "creation": "2026-04-20 14:10:42.964977",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -11,6 +11,7 @@
   "status",
   "virtual_machine",
   "progress",
+  "uuid",
   "uploaded_to_s3"
  ],
  "fields": [
@@ -47,16 +48,22 @@
    "fieldtype": "Link",
    "label": "Virtual Machine",
    "options": "Virtual Machine"
+  },
+  {
+   "fieldname": "uuid",
+   "fieldtype": "Data",
+   "label": "UUID",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-05-04 10:41:46.428936",
+ "modified": "2026-05-06 17:05:35.859144",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Snapshot",
- "naming_rule": "UUID",
+ "naming_rule": "Expression (old style)",
  "owner": "Administrator",
  "permissions": [
   {
