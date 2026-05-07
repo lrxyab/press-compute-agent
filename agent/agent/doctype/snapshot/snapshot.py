@@ -87,7 +87,7 @@ class BaseSnapshot(Document):
 
 		self.file_path = str(image_path.absolute())
 		if self.doctype == "Snapshot":
-			self.status = "Unavailable"
+			self.status = "Pending"
 		else:
 			self.status = "Available"
 
@@ -154,7 +154,7 @@ class BaseSnapshot(Document):
 
 	def _upload_file_to_s3(self):
 		s3_client, creds = get_s3_client_and_credentials()
-		self.status = "Unavailable"
+		self.status = "Pending"
 		s3_client.upload_file(self.file_path, creds.bucket_name, Key=self.name)
 		self.save()
 
