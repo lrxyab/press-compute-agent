@@ -55,6 +55,8 @@ class BaseSnapshot(Document):
 
 	def _take_image_file(self):  # noqa: C901
 		image_path = Path(CONFIG_PATH, self.image_path, f"{uuid4()}.qcow2")
+		self.file_path = str(image_path.absolute())
+		frappe.db.commit()
 
 		self.just_copy = False
 		if not self.virtual_machine:
@@ -88,7 +90,6 @@ class BaseSnapshot(Document):
 
 			shutil.copy(self.source_image_path, image_path.absolute())
 
-		self.file_path = str(image_path.absolute())
 		if self.doctype == "Snapshot":
 			self.status = "Pending"
 		else:
