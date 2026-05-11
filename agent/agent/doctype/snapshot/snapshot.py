@@ -56,6 +56,7 @@ class BaseSnapshot(Document):
 	def _take_image_file(self):  # noqa: C901
 		image_path = Path(CONFIG_PATH, self.image_path, f"{uuid4()}.qcow2")
 		self.file_path = str(image_path.absolute())
+		frappe.db.set_value(self.doctype, self.name, "file_path", self.file_path)
 		frappe.db.commit()
 
 		self.just_copy = False
