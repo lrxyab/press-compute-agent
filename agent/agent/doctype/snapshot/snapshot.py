@@ -45,7 +45,7 @@ It expects the following methods to be implemented:
 class BaseSnapshot(Document):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
-		self.image_path = "disks"
+		self.image_path = "snapshots"
 		self.not_attached = False
 
 	def delete_image(self):
@@ -111,7 +111,12 @@ class BaseSnapshot(Document):
 	@frappe.whitelist()
 	def take_image(self):
 		frappe.enqueue_doc(
-			self.doctype, self.name, "_take_image_file", enqueue_after_commit=True, queue="long"
+			self.doctype,
+			self.name,
+			"_take_image_file",
+			enqueue_after_commit=True,
+			queue="long",
+			timeout=7200,
 		)
 
 	def create_disk_from_image(self, size: int):
