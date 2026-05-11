@@ -230,7 +230,7 @@ class Snapshot(BaseSnapshot):
 		status: DF.Literal["Draft", "Available", "Pending", "Unavailable"]
 		uploaded_to_s3: DF.Check
 		uuid: DF.Data | None
-		virtual_machine: DF.Link | None
+		virtual_machine: DF.Data | None
 	# end: auto-generated types
 
 	def __init__(self, *args, **kwargs):

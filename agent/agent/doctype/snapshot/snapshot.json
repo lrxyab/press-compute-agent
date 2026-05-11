@@ -46,7 +46,7 @@
   },
   {
    "fieldname": "virtual_machine",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "label": "Virtual Machine",
    "options": "Virtual Machine"
   },
@@ -66,7 +66,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-05-11 09:33:04.648269",
+ "modified": "2026-05-11 16:01:52.531900",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Snapshot",
