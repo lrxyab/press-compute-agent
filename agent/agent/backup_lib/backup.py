@@ -1,9 +1,13 @@
 import subprocess
 import time
+from functools import cached_property
+from typing import TYPE_CHECKING
 from xml.dom.minidom import Document
 
 import frappe
-import libvirt
+
+if TYPE_CHECKING:
+	import libvirt
 
 
 class VMBackup:
@@ -14,28 +18,35 @@ class VMBackup:
 
 	def backup_disk(self, disk_device, destination):
 		xml = Document()
+
+		domainbackup = xml.createElement("domainbackup")
+		domainbackup.setAttribute("mode", "push")
+		xml.appendChild(domainbackup)
+
+		disks = xml.createElement("disks")
+		domainbackup.appendChild(disks)
+
 		disk = xml.createElement("disk")
+		disk.setAttribute("name", disk_device)
 		disk.setAttribute("type", "file")
-		xml.appendChild(disk)
+		disks.appendChild(disk)
 
-		driver = xml.createElement("driver")
-		driver.setAttribute("name", "qemu")
-		driver.setAttribute("type", "qcow2")
-		disk.appendChild(driver)
-
-		source = xml.createElement("source")
-		# "source" means destination. Really??
-		source.setAttribute("file", destination)
-		disk.appendChild(source)
+		target = xml.createElement("target")
+		target.setAttribute("file", destination)
+		disk.appendChild(target)
 
 		self.disk_device = disk_device
 		self.destination = destination
 		self.xml = xml.toxml()
 
 	def begin(self):
-		self.domain.suspend()
+		if self.host_has_qemu_ga:
+			self.domain.fsFreeze()
 
-		self.domain.blockCopy(self.disk_device, self.xml, None, libvirt.VIR_DOMAIN_BLOCK_COPY_TRANSIENT_JOB)
+		self.domain.backupBegin(self.xml, None, 0)
+
+		if self.host_has_qemu_ga:
+			self.domain.fsThaw()
 
 		while True:
 			progress, completed = self.get_status()
@@ -57,11 +68,6 @@ class VMBackup:
 				break
 			time.sleep(0.3)
 
-		self.domain.blockJobAbort(
-			self.disk_device,
-			libvirt.VIR_DOMAIN_BLOCK_JOB_ABORT_PIVOT | libvirt.VIR_DOMAIN_BLOCK_COPY_REUSE_EXT,
-		)
-		self.domain.resume()
 		# add `<your_user> ALL=\(ALL\) NOPASSWD: /user/bin/chmod` to /etc/sudoers
 		subprocess.call(["sudo", "chmod", "777", self.destination])
 
@@ -73,3 +79,11 @@ class VMBackup:
 		if info["cur"] == info["end"]:
 			return 1, True
 		return info["cur"] / info["end"], False
+
+	@cached_property
+	def host_has_qemu_ga(self):
+		try:
+			self.domain.guestInfo()
+		except Exception:
+			return False
+		return True

@@ -12,7 +12,8 @@
   "virtual_machine",
   "progress",
   "uuid",
-  "uploaded_to_s3"
+  "uploaded_to_s3",
+  "fs_freeze"
  ],
  "fields": [
   {
@@ -54,12 +55,18 @@
    "fieldtype": "Data",
    "label": "UUID",
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "fs_freeze",
+   "fieldtype": "Check",
+   "label": "FS Freeze"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-05-06 17:05:35.859144",
+ "modified": "2026-05-11 09:33:04.648269",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Snapshot",

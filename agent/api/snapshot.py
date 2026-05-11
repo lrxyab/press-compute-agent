@@ -26,6 +26,7 @@ def sync(snapshot_id: str):
 		"status": snapshot_doc.status,
 		"progress": snapshot_doc.progress,
 		"created": snapshot_doc.creation,
+		"fs_freeze": snapshot_doc.fs_freeze,
 	}
 
 

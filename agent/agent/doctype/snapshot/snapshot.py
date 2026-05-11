@@ -53,12 +53,13 @@ class BaseSnapshot(Document):
 		self.status = "Unavailable"
 		self.save()
 
-	def _take_image_file(self):
+	def _take_image_file(self):  # noqa: C901
 		image_path = Path(CONFIG_PATH, self.image_path, f"{uuid4()}.qcow2")
 
 		self.just_copy = False
 		if not self.virtual_machine:
 			self.just_copy = True
+
 		else:
 			virtual_machine: VirtualMachine = frappe.get_doc("Virtual Machine", self.virtual_machine)
 
@@ -70,6 +71,8 @@ class BaseSnapshot(Document):
 
 				backup.backup_disk(self.device, str(image_path.absolute()))
 				backup.begin()
+
+				self.fs_freeze = backup.host_has_qemu_ga
 
 				for disk in virtual_machine.disks:
 					if disk.device == self.device:
@@ -100,13 +103,16 @@ class BaseSnapshot(Document):
 		"""
 
 		if self.doctype == "Snapshot":
-			frappe.enqueue_doc(
-				self.doctype, self.name, "_upload_file_to_s3_and_delete_local", enqueue_after_commit=True
-			)
+			try:
+				self._upload_file_to_s3_and_delete_local()
+			except Exception:
+				os.remove(self.file_path)
 
 	@frappe.whitelist()
 	def take_image(self):
-		frappe.enqueue_doc(self.doctype, self.name, "_take_image_file", enqueue_after_commit=True)
+		frappe.enqueue_doc(
+			self.doctype, self.name, "_take_image_file", enqueue_after_commit=True, queue="long"
+		)
 
 	def create_disk_from_image(self, size: int):
 		disk_doc: Disk = frappe.new_doc("Disk")
@@ -211,6 +217,7 @@ class Snapshot(BaseSnapshot):
 		from frappe.types import DF
 
 		file_path: DF.Data | None
+		fs_freeze: DF.Check
 		progress: DF.Percent
 		sha256sum: DF.Data | None
 		status: DF.Literal["Draft", "Available", "Pending", "Unavailable"]
