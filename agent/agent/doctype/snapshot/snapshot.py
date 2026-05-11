@@ -56,7 +56,7 @@ class BaseSnapshot(Document):
 	def _take_image_file(self):  # noqa: C901
 		image_path = Path(CONFIG_PATH, self.image_path, f"{uuid4()}.qcow2")
 		self.file_path = str(image_path.absolute())
-		frappe.db.set_value(self.doctype, self.name, "file_path", self.file_path)
+		frappe.db.set_value(self.doctype, self.name, "file_path", self.file_path, update_modified=False)
 		frappe.db.commit()
 
 		self.just_copy = False
@@ -99,7 +99,6 @@ class BaseSnapshot(Document):
 		self.sha256sum = get_sha256sum_of_file(self.file_path)
 		self.progress = 100
 		self.save()
-		self.load_from_db()
 
 		"""
 			If it's a snapshot, we need to upload it to S3 after taking the image, but for a virtual machine image, we don't want to do that at all because it's only used for creating disks and attaching to VMs, not for backup purposes and because we want to keep the image locally for faster disk creation.
@@ -171,7 +170,6 @@ class BaseSnapshot(Document):
 		self.status = "Pending"
 		s3_client.upload_file(self.file_path, creds.bucket_name, Key=self.name)
 		self.save()
-		self.load_from_db()
 
 	def _upload_file_to_s3_and_delete_local(self):
 		self._upload_file_to_s3()
@@ -181,7 +179,6 @@ class BaseSnapshot(Document):
 
 		self.status = "Available"
 		self.save()
-		self.load_from_db()
 
 	@frappe.whitelist(methods=["POST"])
 	def sync(self):
