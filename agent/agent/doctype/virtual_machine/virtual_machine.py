@@ -3,7 +3,6 @@
 
 import json
 import os
-import shutil
 import subprocess
 import tempfile
 import time
@@ -717,11 +716,11 @@ class VirtualMachine(Document):
 						str(temp_path.absolute()),
 					],
 					check=True,
+					capture_output=True,
+					text=True,
 				)
-			except Exception as e:
-				frappe.throw(f"{e}")
-			finally:
-				shutil.rmtree(temp_path)
+			except subprocess.CalledProcessError as e:
+				frappe.throw(f"{e}\n{e.stderr}")
 
 	def refresh_private_network_interface(self):
 		# Detaching and reattaching forces netplan to be loaded
