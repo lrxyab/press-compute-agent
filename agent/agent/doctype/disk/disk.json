@@ -18,7 +18,9 @@
   "is_snapshot",
   "storage_medium",
   "from_virtual_machine_image",
-  "from_snapshot"
+  "from_snapshot",
+  "max_iops",
+  "max_throughput_mibs"
  ],
  "fields": [
   {
@@ -102,12 +104,26 @@
    "fieldtype": "Select",
    "label": "Status",
    "options": "Unavailable\nAvailable"
+  },
+  {
+   "description": "Usually associated with random workloads",
+   "fieldname": "max_iops",
+   "fieldtype": "Int",
+   "label": "Max IOPs",
+   "non_negative": 1
+  },
+  {
+   "description": "Usually associated with sequential workloads",
+   "fieldname": "max_throughput_mibs",
+   "fieldtype": "Int",
+   "label": "Max Throughput (MiBs)",
+   "non_negative": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-26 23:17:47.538112",
+ "modified": "2026-06-25 22:57:04.390780",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Disk",

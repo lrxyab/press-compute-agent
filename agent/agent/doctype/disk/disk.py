@@ -38,6 +38,8 @@ class Disk(Document):
 		from_virtual_machine_image: DF.Check
 		is_primary_disk: DF.Check
 		is_snapshot: DF.Check
+		max_iops: DF.Int
+		max_throughput_mibs: DF.Int
 		size: DF.Float
 		snapshot: DF.Link | None
 		status: DF.Literal["Unavailable", "Available"]

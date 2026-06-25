@@ -56,6 +56,8 @@ class VirtualMachine(Document):
 		cloud_init: DF.Code | None
 		disks: DF.Table[VMDisk]
 		has_private_ip: DF.Check
+		max_iops: DF.Int
+		max_throughput_mibs: DF.Int
 		memory: DF.Int
 		network_interfaces: DF.Table[NetworkInterface]
 		number_of_vcpus: DF.Int
@@ -96,6 +98,8 @@ class VirtualMachine(Document):
 			root_disk.storage_medium = frappe.get_value(
 				"Virtual Machine Image", self.virtual_machine_image, "storage_medium"
 			)
+			root_disk.max_iops = self.max_iops
+			root_disk.max_throughput_mibs = self.max_throughput_mibs
 			root_disk.insert()
 			self.append("disks", {"disk": root_disk.name, "device": "vda"})
 
@@ -342,6 +346,7 @@ class VirtualMachine(Document):
 				disk_type=disk_type,
 				parent_xml=self.xml,
 				backing_chain=backing_chain,
+				disk_doc=disk_doc,
 			)
 			devices.appendChild(disk_elem)
 
@@ -352,13 +357,14 @@ class VirtualMachine(Document):
 
 		self.device_config = devices
 
-	def create_disk_config(
+	def create_disk_config(  # noqa: C901
 		self,
 		file_path: str,
 		dev: str,
 		disk_type: Literal["Volume", "Seed", "Ceph"],
 		parent_xml,
 		backing_chain=None,
+		disk_doc=None,
 	):
 		if not backing_chain:
 			backing_chain = []
@@ -424,6 +430,25 @@ class VirtualMachine(Document):
 		target.setAttribute("dev", dev)
 		target.setAttribute("bus", target_bus)
 		disk_elem.appendChild(target)
+
+		if disk_doc:
+			iotune = parent_xml.createElement("iotune")
+
+			if disk_doc.max_iops:
+				total_iops = parent_xml.createElement("total_iops_sec")
+				total_iops_text = parent_xml.createTextNode(str(disk_doc.max_iops))
+				total_iops.appendChild(total_iops_text)
+				iotune.appendChild(total_iops)
+
+			if disk_doc.max_throughput_mibs:
+				total_bytes = parent_xml.createElement("total_bytes_sec")
+				bytes_value = disk_doc.max_throughput_mibs * 1024 * 1024  # MiB -> Bytes
+				bytes_text = parent_xml.createTextNode(str(bytes_value))
+				total_bytes.appendChild(bytes_text)
+				iotune.appendChild(total_bytes)
+
+			if iotune.hasChildNodes():
+				disk_elem.appendChild(iotune)
 
 		return disk_elem
 
@@ -547,7 +572,9 @@ class VirtualMachine(Document):
 		disk_type = (
 			frappe.get_value("Disk", {"file_path": disk}, "storage_medium") == "Ceph" and "Ceph"
 		) or "Volume"
-		xml = self.create_disk_config(disk, dev, disk_type, minidom.Document())
+		xml = self.create_disk_config(
+			disk, dev, disk_type, minidom.Document()
+		)  # TODO: Add I/O Limits to hotplugged disks
 		self.domain.attachDeviceFlags(xml.toxml(), libvirt.VIR_DOMAIN_AFFECT_LIVE)
 
 	def detach_disk(self, dev: str):
