@@ -1,0 +1,39 @@
+# Managed by pyinfra — OVS public bridge {{ ovs_public_bridge }} masters {{ public_interface }}.
+# WARNING: applying this moves the host's public IP onto the bridge.
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    {{ public_interface }}:
+      dhcp4: false
+{%- if private_interface %}
+    {{ private_interface }}:
+      addresses:
+        - {{ private_ip_cidr }}
+{%- if private_routes %}
+      routes:
+{%- for r in private_routes %}
+        - to: {{ r.to }}
+          via: {{ r.via }}
+{%- endfor %}
+{%- endif %}
+{%- endif %}
+
+  openvswitch: {}
+
+  bridges:
+    {{ ovs_public_bridge }}:
+      interfaces: [{{ public_interface }}]
+      addresses:
+        - {{ public_ip_cidr }}
+      routes:
+        - to: default
+          via: {{ public_gateway }}
+      nameservers:
+        addresses:
+{%- for ns in public_nameservers %}
+          - {{ ns }}
+{%- endfor %}
+      parameters:
+        stp: false
+      openvswitch: {}
