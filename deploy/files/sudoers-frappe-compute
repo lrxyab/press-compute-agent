@@ -1,0 +1,3 @@
+# Managed by pyinfra. The agent shells out to `sudo chmod` when staging
+# backup/snapshot files (see agent/agent/backup_lib/backup.py).
+frappe ALL=(ALL) NOPASSWD: /usr/bin/chmod
