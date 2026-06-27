@@ -1,0 +1,100 @@
+; Managed by pyinfra. Frappe Compute Agent process group.
+; Notes:
+; priority=1 --> Lower priorities indicate programs that start first and shut down last
+; killasgroup=true --> send kill signal to child processes too
+; graceful timeout should always be lower than stopwaitsecs to avoid orphan gunicorn workers.
+
+[program:frappe-bench-frappe-web]
+command={{ bench_dir }}/env/bin/gunicorn -b 127.0.0.1:{{ webserver_port }} -w {{ gunicorn_workers }} --max-requests {{ gunicorn_max_requests }} --max-requests-jitter {{ gunicorn_max_requests_jitter }} -t {{ gunicorn_timeout }} --graceful-timeout {{ gunicorn_graceful_timeout }} frappe.app:application --preload --limit-request-line 0
+priority=4
+autostart=true
+autorestart=true
+stdout_logfile={{ bench_dir }}/logs/web.log
+stderr_logfile={{ bench_dir }}/logs/web.error.log
+stopwaitsecs=40
+killasgroup=true
+user={{ frappe_user }}
+directory={{ bench_dir }}/sites
+startretries=10
+
+[program:frappe-bench-frappe-schedule]
+command={{ bench_bin }} schedule
+priority=3
+autostart=true
+stdout_logfile={{ bench_dir }}/logs/schedule.log
+stderr_logfile={{ bench_dir }}/logs/schedule.error.log
+user={{ frappe_user }}
+directory={{ bench_dir }}
+startretries=10
+
+[program:frappe-bench-frappe-short-worker]
+command={{ bench_bin }} worker --queue short,default
+priority=4
+autostart=true
+autorestart=true
+stdout_logfile={{ bench_dir }}/logs/worker.log
+stderr_logfile={{ bench_dir }}/logs/worker.error.log
+user={{ frappe_user }}
+stopwaitsecs=360
+directory={{ bench_dir }}
+killasgroup=true
+numprocs={{ worker_numprocs }}
+process_name=%(program_name)s-%(process_num)d
+startretries=10
+
+[program:frappe-bench-frappe-long-worker]
+command={{ bench_bin }} worker --queue long,default,short
+priority=4
+autostart=true
+autorestart=true
+stdout_logfile={{ bench_dir }}/logs/worker.log
+stderr_logfile={{ bench_dir }}/logs/worker.error.log
+user={{ frappe_user }}
+stopwaitsecs=1560
+directory={{ bench_dir }}
+killasgroup=true
+numprocs={{ worker_numprocs }}
+process_name=%(program_name)s-%(process_num)d
+startretries=10
+
+[program:frappe-bench-redis-cache]
+command=/usr/bin/redis-server {{ bench_dir }}/config/redis_cache.conf
+priority=1
+autostart=true
+autorestart=true
+stdout_logfile={{ bench_dir }}/logs/redis-cache.log
+stderr_logfile={{ bench_dir }}/logs/redis-cache.error.log
+user={{ frappe_user }}
+directory={{ bench_dir }}/sites
+startretries=10
+
+[program:frappe-bench-redis-queue]
+command=/usr/bin/redis-server {{ bench_dir }}/config/redis_queue.conf
+priority=1
+autostart=true
+autorestart=true
+stdout_logfile={{ bench_dir }}/logs/redis-queue.log
+stderr_logfile={{ bench_dir }}/logs/redis-queue.error.log
+user={{ frappe_user }}
+directory={{ bench_dir }}/sites
+startretries=10
+
+[program:frappe-bench-node-socketio]
+command={{ node_bin }} {{ bench_dir }}/apps/frappe/socketio.js
+priority=4
+autostart=true
+autorestart=true
+stdout_logfile={{ bench_dir }}/logs/node-socketio.log
+stderr_logfile={{ bench_dir }}/logs/node-socketio.error.log
+user={{ frappe_user }}
+directory={{ bench_dir }}
+startretries=10
+
+[group:frappe-bench-web]
+programs=frappe-bench-frappe-web,frappe-bench-node-socketio
+
+[group:frappe-bench-workers]
+programs=frappe-bench-frappe-schedule,frappe-bench-frappe-short-worker,frappe-bench-frappe-long-worker
+
+[group:frappe-bench-redis]
+programs=frappe-bench-redis-cache,frappe-bench-redis-queue
