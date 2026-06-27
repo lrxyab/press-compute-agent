@@ -1,0 +1,31 @@
+# Managed by pyinfra. Reverse proxy for the Frappe Compute Agent bench.
+# A real domain in web_domain => automatic HTTPS. A *.localhost / IP => Caddy's
+# internal CA (or plain HTTP for :80).
+{{ web_domain }} {
+{%- if caddy_acme_email %}
+	tls {{ caddy_acme_email }}
+{%- endif %}
+
+	encode zstd gzip
+
+	# Frappe static assets straight off disk (what nginx normally serves).
+	handle_path /assets/* {
+		root * {{ bench_dir }}/sites/assets
+		file_server
+	}
+
+	# Socket.IO (realtime) — Caddy upgrades websockets automatically.
+	handle /socket.io/* {
+		reverse_proxy 127.0.0.1:{{ socketio_port }}
+	}
+
+	# Everything else -> the gunicorn webserver.
+	handle {
+		reverse_proxy 127.0.0.1:{{ webserver_port }} {
+			header_up Host {host}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+}
