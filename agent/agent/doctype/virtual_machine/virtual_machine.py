@@ -56,13 +56,13 @@ class VirtualMachine(Document):
 		cloud_init: DF.Code | None
 		disks: DF.Table[VMDisk]
 		has_private_ip: DF.Check
-		max_iops: DF.Int
-		max_throughput_mibs: DF.Int
 		memory: DF.Int
 		network_interfaces: DF.Table[NetworkInterface]
 		number_of_vcpus: DF.Int
 		public_ip_address: DF.Data | None
 		root_disk_size: DF.Int
+		root_max_iops: DF.Int
+		root_max_throughput_mibs: DF.Int
 		ssh_key: DF.Code | None
 		state: DF.Literal["Undefined", "Stopped", "Running", "Paused", "Saved"]
 		uuid: DF.Data | None
@@ -98,8 +98,8 @@ class VirtualMachine(Document):
 			root_disk.storage_medium = frappe.get_value(
 				"Virtual Machine Image", self.virtual_machine_image, "storage_medium"
 			)
-			root_disk.max_iops = self.max_iops
-			root_disk.max_throughput_mibs = self.max_throughput_mibs
+			root_disk.max_iops = self.root_max_iops
+			root_disk.max_throughput_mibs = self.root_max_throughput_mibs
 			root_disk.insert()
 			self.append("disks", {"disk": root_disk.name, "device": "vda"})
 
@@ -569,12 +569,11 @@ class VirtualMachine(Document):
 	def attach_disk(self, disk: str, dev: str):
 		from xml.dom import minidom
 
-		disk_type = (
-			frappe.get_value("Disk", {"file_path": disk}, "storage_medium") == "Ceph" and "Ceph"
-		) or "Volume"
-		xml = self.create_disk_config(
-			disk, dev, disk_type, minidom.Document()
-		)  # TODO: Add I/O Limits to hotplugged disks
+		disk_name = frappe.db.get_value("Disk", {"file_path": disk}, "name")
+		disk_doc = frappe.get_doc("Disk", disk_name) if disk_name else None
+
+		disk_type = (disk_doc.storage_medium == "Ceph" and "Ceph") if disk_doc else "Volume"
+		xml = self.create_disk_config(disk, dev, disk_type, minidom.Document(), disk_doc)
 		self.domain.attachDeviceFlags(xml.toxml(), libvirt.VIR_DOMAIN_AFFECT_LIVE)
 
 	def detach_disk(self, dev: str):

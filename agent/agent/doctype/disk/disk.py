@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import frappe
+import libvirt
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils.password import get_decrypted_password
@@ -113,6 +114,11 @@ class Disk(Document):
 		if self.has_value_changed("size") and self.get_doc_before_save():
 			self.set_disk_size()
 
+		if (
+			self.has_value_changed("max_iops") or self.has_value_changed("max_throughput_mibs")
+		) and self.get_doc_before_save():
+			self.set_io_limits()
+
 	def create_disk(self):
 		# TODO: find a way to do this without subprocess calls
 		match self.storage_medium:
@@ -161,6 +167,26 @@ class Disk(Document):
 		disk_entry = frappe.db.get_value("VM Disk", {"disk": self.name}, ["parent", "device"], as_dict=True)
 		virtual_machine_doc: VirtualMachine = frappe.get_doc("Virtual Machine", disk_entry.parent)
 		virtual_machine_doc.domain.blockResize(disk_entry.device, self.size * (1024**2))
+
+	def set_io_limits(self):
+		disk_entry = frappe.db.get_value("VM Disk", {"disk": self.name}, ["parent", "device"], as_dict=True)
+		if not disk_entry:
+			return
+		virtual_machine_doc: VirtualMachine = frappe.get_doc("Virtual Machine", disk_entry.parent)
+		if virtual_machine_doc.state not in ["Running", "Paused"]:
+			return
+		io_params = {
+			"total_bytes_sec": int(self.max_throughput_mibs * 1024 * 1024) if self.max_throughput_mibs else 0,
+			"total_iops_sec": int(self.max_iops) if self.max_iops else 0,
+		}
+		try:
+			virtual_machine_doc.domain.setBlockIoTune(
+				disk_entry.device,
+				io_params,
+				libvirt.VIR_DOMAIN_AFFECT_LIVE | libvirt.VIR_DOMAIN_AFFECT_CONFIG,
+			)
+		except Exception as e:
+			frappe.throw(_("Failed to tune IO: {}").format(e))
 
 
 def create_disk_from_snapshot(snapshot_id: int) -> str:

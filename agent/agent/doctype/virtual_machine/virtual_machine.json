@@ -10,8 +10,8 @@
   "memory",
   "number_of_vcpus",
   "root_disk_size",
-  "max_iops",
-  "max_throughput_mibs",
+  "root_max_iops",
+  "root_max_throughput_mibs",
   "column_break_ctcj",
   "state",
   "uuid",
@@ -134,13 +134,13 @@
    "label": "Has Private IP"
   },
   {
-   "fieldname": "max_iops",
+   "fieldname": "root_max_iops",
    "fieldtype": "Int",
    "label": "Max IOPs",
    "non_negative": 1
   },
   {
-   "fieldname": "max_throughput_mibs",
+   "fieldname": "root_max_throughput_mibs",
    "fieldtype": "Int",
    "label": "Max Throughput (MiBs)",
    "non_negative": 1
@@ -149,7 +149,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-26 03:58:14.125739",
+ "modified": "2026-07-09 00:16:52.471154",
  "modified_by": "Administrator",
  "module": "Agent",
  "name": "Virtual Machine",
