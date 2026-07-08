@@ -573,7 +573,7 @@ class VirtualMachine(Document):
 		disk_doc = frappe.get_doc("Disk", disk_name) if disk_name else None
 
 		disk_type = (disk_doc.storage_medium == "Ceph" and "Ceph") if disk_doc else "Volume"
-		xml = self.create_disk_config(disk, dev, disk_type, minidom.Document(), disk_doc)
+		xml = self.create_disk_config(disk, dev, disk_type, minidom.Document(), disk_doc=disk_doc)
 		self.domain.attachDeviceFlags(xml.toxml(), libvirt.VIR_DOMAIN_AFFECT_LIVE)
 
 	def detach_disk(self, dev: str):
